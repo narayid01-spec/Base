@@ -1,0 +1,1390 @@
+--========================================================
+-- VORTEX V1
+-- UI FIXED EDITION
+-- SC1 SYSTEM PRESERVED
+--========================================================
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+
+--========================================================
+-- CONFIG
+--========================================================
+
+local VORTEX_WIDTH = 560
+local VORTEX_HEIGHT = 350
+
+local SC1_URL =
+    "https://raw.githubusercontent.com/gumanba/Scripts/main/ClimbandJump"
+
+--========================================================
+-- CLEAN VORTEX ONLY
+--========================================================
+
+pcall(function()
+    local x = CoreGui:FindFirstChild("VortexV1")
+    if x then
+        x:Destroy()
+    end
+end)
+
+pcall(function()
+    local x = CoreGui:FindFirstChild("VortexReopenUI")
+    if x then
+        x:Destroy()
+    end
+end)
+
+pcall(function()
+    local pg = Player:FindFirstChild("PlayerGui")
+
+    if pg then
+
+        local x =
+            pg:FindFirstChild("VortexV1")
+
+        if x then
+            x:Destroy()
+        end
+
+        local y =
+            pg:FindFirstChild("VortexReopenUI")
+
+        if y then
+            y:Destroy()
+        end
+    end
+end)
+
+--========================================================
+-- VORTEX
+--========================================================
+
+local Vortex = Instance.new("ScreenGui")
+
+Vortex.Name = "VortexV1"
+Vortex.ResetOnSpawn = false
+Vortex.IgnoreGuiInset = true
+Vortex.DisplayOrder = 999999
+Vortex.ZIndexBehavior =
+    Enum.ZIndexBehavior.Sibling
+
+pcall(function()
+    Vortex.Parent = CoreGui
+end)
+
+if not Vortex.Parent then
+    Vortex.Parent =
+        Player:WaitForChild("PlayerGui")
+end
+
+--========================================================
+-- MAIN
+--========================================================
+
+local Main = Instance.new("Frame")
+
+Main.Name = "Main"
+
+Main.AnchorPoint =
+    Vector2.new(0.5,0.5)
+
+Main.Position =
+    UDim2.fromScale(0.5,0.5)
+
+Main.Size =
+    UDim2.fromOffset(
+        VORTEX_WIDTH,
+        VORTEX_HEIGHT
+    )
+
+Main.BackgroundColor3 =
+    Color3.fromRGB(18,18,22)
+
+Main.BackgroundTransparency = 0.06
+
+Main.BorderSizePixel = 0
+
+Main.ClipsDescendants = true
+
+Main.Parent = Vortex
+
+local MainCorner =
+    Instance.new("UICorner")
+
+MainCorner.CornerRadius =
+    UDim.new(0,12)
+
+MainCorner.Parent = Main
+
+local MainStroke =
+    Instance.new("UIStroke")
+
+MainStroke.Color =
+    Color3.fromRGB(70,70,80)
+
+MainStroke.Thickness = 1
+
+MainStroke.Parent = Main
+
+--========================================================
+-- HEADER
+--========================================================
+
+local Header =
+    Instance.new("Frame")
+
+Header.Name = "Header"
+
+Header.Size =
+    UDim2.new(1,0,0,38)
+
+Header.BackgroundColor3 =
+    Color3.fromRGB(10,10,13)
+
+Header.BorderSizePixel = 0
+
+Header.ZIndex = 100
+
+Header.Parent = Main
+
+local HeaderCorner =
+    Instance.new("UICorner")
+
+HeaderCorner.CornerRadius =
+    UDim.new(0,12)
+
+HeaderCorner.Parent = Header
+
+local Title =
+    Instance.new("TextLabel")
+
+Title.BackgroundTransparency = 1
+
+Title.Position =
+    UDim2.fromOffset(14,0)
+
+Title.Size =
+    UDim2.new(1,-110,1,0)
+
+Title.Font =
+    Enum.Font.GothamBold
+
+Title.Text =
+    "VORTEX V1"
+
+Title.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+Title.TextSize = 16
+
+Title.TextXAlignment =
+    Enum.TextXAlignment.Left
+
+Title.ZIndex = 101
+
+Title.Parent = Header
+
+--========================================================
+-- MINIMIZE BUTTON
+--========================================================
+
+local Minimize =
+    Instance.new("TextButton")
+
+Minimize.Name =
+    "Minimize"
+
+Minimize.Position =
+    UDim2.new(1,-68,0,5)
+
+Minimize.Size =
+    UDim2.fromOffset(30,28)
+
+Minimize.BackgroundColor3 =
+    Color3.fromRGB(35,35,42)
+
+Minimize.BorderSizePixel = 0
+
+Minimize.Text = "—"
+
+Minimize.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+Minimize.TextSize = 18
+
+Minimize.Font =
+    Enum.Font.GothamBold
+
+Minimize.ZIndex = 102
+
+Minimize.Parent = Header
+
+local MinCorner =
+    Instance.new("UICorner")
+
+MinCorner.CornerRadius =
+    UDim.new(0,7)
+
+MinCorner.Parent = Minimize
+
+--========================================================
+-- CLOSE
+--========================================================
+
+local Close =
+    Instance.new("TextButton")
+
+Close.Name = "Close"
+
+Close.Position =
+    UDim2.new(1,-34,0,5)
+
+Close.Size =
+    UDim2.fromOffset(30,28)
+
+Close.BackgroundColor3 =
+    Color3.fromRGB(45,25,28)
+
+Close.BorderSizePixel = 0
+
+Close.Text = "×"
+
+Close.TextColor3 =
+    Color3.fromRGB(255,100,100)
+
+Close.TextSize = 20
+
+Close.Font =
+    Enum.Font.GothamBold
+
+Close.ZIndex = 102
+
+Close.Parent = Header
+
+local CloseCorner =
+    Instance.new("UICorner")
+
+CloseCorner.CornerRadius =
+    UDim.new(0,7)
+
+CloseCorner.Parent = Close
+
+--========================================================
+-- DUPE
+--========================================================
+
+local DupeArea =
+    Instance.new("Frame")
+
+DupeArea.Position =
+    UDim2.fromOffset(10,46)
+
+DupeArea.Size =
+    UDim2.new(1,-20,0,38)
+
+DupeArea.BackgroundColor3 =
+    Color3.fromRGB(25,25,30)
+
+DupeArea.BorderSizePixel = 0
+
+DupeArea.ClipsDescendants = true
+
+DupeArea.ZIndex = 20
+
+DupeArea.Parent = Main
+
+local DupeAreaCorner =
+    Instance.new("UICorner")
+
+DupeAreaCorner.CornerRadius =
+    UDim.new(0,8)
+
+DupeAreaCorner.Parent =
+    DupeArea
+
+local Dupe =
+    Instance.new("TextButton")
+
+Dupe.Name = "Dupe"
+
+Dupe.Position =
+    UDim2.fromOffset(4,4)
+
+Dupe.Size =
+    UDim2.new(1,-8,1,-8)
+
+Dupe.BackgroundColor3 =
+    Color3.fromRGB(38,38,46)
+
+Dupe.BorderSizePixel = 0
+
+Dupe.Text = "DUPE"
+
+Dupe.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+Dupe.TextSize = 14
+
+Dupe.Font =
+    Enum.Font.GothamBold
+
+Dupe.ZIndex = 21
+
+Dupe.Parent = DupeArea
+
+local DupeCorner =
+    Instance.new("UICorner")
+
+DupeCorner.CornerRadius =
+    UDim.new(0,6)
+
+DupeCorner.Parent = Dupe
+
+--========================================================
+-- CONTENT
+--========================================================
+
+local Content =
+    Instance.new("Frame")
+
+Content.Name = "Content"
+
+Content.Position =
+    UDim2.fromOffset(10,90)
+
+Content.Size =
+    UDim2.new(1,-20,1,-100)
+
+Content.BackgroundTransparency = 1
+
+Content.BorderSizePixel = 0
+
+Content.ClipsDescendants = true
+
+Content.Parent = Main
+
+--========================================================
+-- FARM SLOT
+--========================================================
+
+local FarmSlot =
+    Instance.new("Frame")
+
+FarmSlot.Name =
+    "FarmSlot"
+
+FarmSlot.Position =
+    UDim2.fromOffset(0,0)
+
+FarmSlot.Size =
+    UDim2.new(0.5,-5,1,0)
+
+FarmSlot.BackgroundColor3 =
+    Color3.fromRGB(22,22,27)
+
+FarmSlot.BorderSizePixel = 0
+
+FarmSlot.ClipsDescendants = true
+
+FarmSlot.Parent = Content
+
+local FarmCorner =
+    Instance.new("UICorner")
+
+FarmCorner.CornerRadius =
+    UDim.new(0,9)
+
+FarmCorner.Parent = FarmSlot
+
+local FarmStroke =
+    Instance.new("UIStroke")
+
+FarmStroke.Color =
+    Color3.fromRGB(55,55,65)
+
+FarmStroke.Thickness = 1
+
+FarmStroke.Parent = FarmSlot
+
+--========================================================
+-- EVENT SLOT
+--========================================================
+
+local EventSlot =
+    Instance.new("Frame")
+
+EventSlot.Name =
+    "EventSlot"
+
+EventSlot.Position =
+    UDim2.new(0.5,5,0,0)
+
+EventSlot.Size =
+    UDim2.new(0.5,-5,1,0)
+
+EventSlot.BackgroundColor3 =
+    Color3.fromRGB(22,22,27)
+
+EventSlot.BorderSizePixel = 0
+
+EventSlot.ClipsDescendants = true
+
+EventSlot.Parent = Content
+
+local EventCorner =
+    Instance.new("UICorner")
+
+EventCorner.CornerRadius =
+    UDim.new(0,9)
+
+EventCorner.Parent = EventSlot
+
+local EventStroke =
+    Instance.new("UIStroke")
+
+EventStroke.Color =
+    Color3.fromRGB(55,55,65)
+
+EventStroke.Thickness = 1
+
+EventStroke.Parent = EventSlot
+
+--========================================================
+-- FARM TITLE
+--========================================================
+
+local FarmLabel =
+    Instance.new("TextLabel")
+
+FarmLabel.Name =
+    "FarmLabel"
+
+FarmLabel.BackgroundTransparency = 1
+
+FarmLabel.AnchorPoint =
+    Vector2.new(0.5,0)
+
+FarmLabel.Position =
+    UDim2.new(0.5,0,0,8)
+
+FarmLabel.Size =
+    UDim2.new(1,-20,0,30)
+
+FarmLabel.Text = "FARM"
+
+FarmLabel.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+FarmLabel.TextSize = 18
+
+FarmLabel.Font =
+    Enum.Font.GothamBold
+
+FarmLabel.TextXAlignment =
+    Enum.TextXAlignment.Center
+
+FarmLabel.ZIndex = 999
+
+FarmLabel.Parent = FarmSlot
+
+--========================================================
+-- EVENT TITLE
+--========================================================
+
+local EventLabel =
+    Instance.new("TextLabel")
+
+EventLabel.Name =
+    "EventLabel"
+
+EventLabel.BackgroundTransparency = 1
+
+EventLabel.AnchorPoint =
+    Vector2.new(0.5,0)
+
+EventLabel.Position =
+    UDim2.new(0.5,0,0,8)
+
+EventLabel.Size =
+    UDim2.new(1,-20,0,30)
+
+EventLabel.Text = "EVENT"
+
+EventLabel.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+EventLabel.TextSize = 18
+
+EventLabel.Font =
+    Enum.Font.GothamBold
+
+EventLabel.TextXAlignment =
+    Enum.TextXAlignment.Center
+
+EventLabel.ZIndex = 999
+
+EventLabel.Parent = EventSlot
+
+--========================================================
+-- SC1
+--========================================================
+
+local FARM_TEXTS = {
+    "CLIMB AND JUMP TOWER",
+    "SET HEIGHT",
+    "JUMP TIME",
+    "AUTO COINS",
+    "AUTO WINS"
+}
+
+local EVENT_TEXTS = {
+    "ANGELS VS. DEMONS EVENT",
+    "GOTO EVENT SERVER",
+    "COLLECT BUFF",
+    "COLLECT TOKENS",
+    "BUY WINGS"
+}
+
+local function GetText(obj)
+
+    local text = ""
+
+    pcall(function()
+        text = tostring(obj.Text or "")
+    end)
+
+    return string.lower(text)
+end
+
+local function ContainsAnyText(
+    obj,
+    signatures
+)
+
+    if not obj then
+        return false
+    end
+
+    if obj:IsA("TextLabel")
+        or obj:IsA("TextButton")
+        or obj:IsA("TextBox") then
+
+        local ownText =
+            GetText(obj)
+
+        for _,signature in ipairs(
+            signatures
+        ) do
+
+            if string.find(
+                ownText,
+                string.lower(signature),
+                1,
+                true
+            ) then
+
+                return true
+            end
+        end
+    end
+
+    for _,desc in ipairs(
+        obj:GetDescendants()
+    ) do
+
+        if desc:IsA("TextLabel")
+            or desc:IsA("TextButton")
+            or desc:IsA("TextBox") then
+
+            local text =
+                GetText(desc)
+
+            for _,signature in ipairs(
+                signatures
+            ) do
+
+                if string.find(
+                    text,
+                    string.lower(signature),
+                    1,
+                    true
+                ) then
+
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local function CountSignatures(
+    obj,
+    signatures
+)
+
+    local count = 0
+
+    for _,signature in ipairs(
+        signatures
+    ) do
+
+        if ContainsAnyText(
+            obj,
+            {signature}
+        ) then
+
+            count += 1
+        end
+    end
+
+    return count
+end
+
+local function FindTextObject(
+    screenGui,
+    text
+)
+
+    local target =
+        string.lower(text)
+
+    for _,obj in ipairs(
+        screenGui:GetDescendants()
+    ) do
+
+        if obj:IsA("TextLabel")
+            or obj:IsA("TextButton")
+            or obj:IsA("TextBox") then
+
+            local current =
+                GetText(obj)
+
+            if string.find(
+                current,
+                target,
+                1,
+                true
+            ) then
+
+                return obj
+            end
+        end
+    end
+
+    return nil
+end
+
+local function FindPanel(
+    screenGui,
+    signatures
+)
+
+    local first =
+        FindTextObject(
+            screenGui,
+            signatures[1]
+        )
+
+    if not first then
+        return nil
+    end
+
+    local current =
+        first.Parent
+
+    local best = nil
+
+    while current
+        and current ~= screenGui do
+
+        if current:IsA("GuiObject") then
+
+            local matched =
+                CountSignatures(
+                    current,
+                    signatures
+                )
+
+            local size =
+                current.AbsoluteSize
+
+            local area =
+                size.X * size.Y
+
+            if matched >= 2
+                and size.X > 20
+                and size.Y > 20
+                and size.X < 1000
+                and size.Y < 800
+                and area < 700000 then
+
+                best = current
+            end
+        end
+
+        current =
+            current.Parent
+    end
+
+    return best
+end
+
+--========================================================
+-- MOUNT
+--========================================================
+
+local Mounted = {}
+
+local function MountPanel(
+    panel,
+    slot
+)
+
+    if not panel
+        or not slot then
+
+        return false
+    end
+
+    if Mounted[panel] then
+        return true
+    end
+
+    task.wait()
+
+    local originalSize =
+        panel.AbsoluteSize
+
+    if originalSize.X <= 1
+        or originalSize.Y <= 1 then
+
+        return false
+    end
+
+    panel.Parent = slot
+
+    panel.AnchorPoint =
+        Vector2.new(0.5,0.5)
+
+    panel.Position =
+        UDim2.fromScale(0.5,0.5)
+
+    panel.Size =
+        UDim2.fromOffset(
+            originalSize.X,
+            originalSize.Y
+        )
+
+    panel.Visible = true
+
+    local scale =
+        panel:FindFirstChild(
+            "__VORTEX_SCALE"
+        )
+
+    if scale then
+        scale:Destroy()
+    end
+
+    scale =
+        Instance.new("UIScale")
+
+    scale.Name =
+        "__VORTEX_SCALE"
+
+    scale.Parent = panel
+
+    local function Update()
+
+        if not panel
+            or not panel.Parent then
+
+            return
+        end
+
+        local slotSize =
+            slot.AbsoluteSize
+
+        local sx =
+            (slotSize.X - 10) /
+            originalSize.X
+
+        local sy =
+            (slotSize.Y - 10) /
+            originalSize.Y
+
+        scale.Scale =
+            math.clamp(
+                math.min(sx,sy),
+                0.25,
+                1
+            )
+
+        panel.AnchorPoint =
+            Vector2.new(0.5,0.5)
+
+        panel.Position =
+            UDim2.fromScale(0.5,0.5)
+
+        panel.Size =
+            UDim2.fromOffset(
+                originalSize.X,
+                originalSize.Y
+            )
+
+        panel.Visible = true
+    end
+
+    Update()
+
+    Mounted[panel] = true
+
+    task.spawn(function()
+
+        while Vortex
+            and Vortex.Parent
+            and panel
+            and panel.Parent == slot do
+
+            Update()
+
+            task.wait(0.08)
+        end
+
+        Mounted[panel] = nil
+    end)
+
+    return true
+end
+
+--========================================================
+-- HIDE REQUESTED SC1 TEXT ONLY
+--========================================================
+
+local function HideRequestedText(root)
+
+    if not root then
+        return
+    end
+
+    for _,obj in ipairs(
+        root:GetDescendants()
+    ) do
+
+        if obj:IsA("TextLabel")
+            or obj:IsA("TextButton")
+            or obj:IsA("TextBox") then
+
+            local text = ""
+
+            pcall(function()
+                text =
+                    string.lower(
+                        tostring(
+                            obj.Text or ""
+                        )
+                    )
+            end)
+
+            if string.find(
+                text,
+                "climb and jump tower",
+                1,
+                true
+            )
+            or string.find(
+                text,
+                "angels vs. demons event",
+                1,
+                true
+            )
+            or string.find(
+                text,
+                "angels vs demons event",
+                1,
+                true
+            )
+            or string.find(
+                text,
+                "youtube: tora isme",
+                1,
+                true
+            ) then
+
+                obj.Visible = false
+            end
+        end
+    end
+end
+
+--========================================================
+-- GET SC1 GUIS
+--========================================================
+
+local function GetAllScreenGuis()
+
+    local list = {}
+
+    for _,gui in ipairs(
+        CoreGui:GetChildren()
+    ) do
+
+        if gui:IsA("ScreenGui")
+            and gui ~= Vortex then
+
+            table.insert(
+                list,
+                gui
+            )
+        end
+    end
+
+    local pg =
+        Player:FindFirstChild(
+            "PlayerGui"
+        )
+
+    if pg then
+
+        for _,gui in ipairs(
+            pg:GetChildren()
+        ) do
+
+            if gui:IsA("ScreenGui")
+                and gui ~= Vortex then
+
+                table.insert(
+                    list,
+                    gui
+                )
+            end
+        end
+    end
+
+    return list
+end
+
+--========================================================
+-- LOAD SC1
+--========================================================
+
+task.spawn(function()
+
+    pcall(function()
+
+        local source =
+            game:HttpGet(SC1_URL)
+
+        local loader =
+            loadstring(source)
+
+        if loader then
+            loader()
+        end
+
+    end)
+
+end)
+
+--========================================================
+-- MOUNT SC1
+--========================================================
+
+task.spawn(function()
+
+    local farmDone = false
+    local eventDone = false
+
+    for attempt = 1,180 do
+
+        task.wait(0.5)
+
+        local guis =
+            GetAllScreenGuis()
+
+        if not farmDone then
+
+            for _,gui in ipairs(guis) do
+
+                local panel =
+                    FindPanel(
+                        gui,
+                        FARM_TEXTS
+                    )
+
+                if panel then
+
+                    if MountPanel(
+                        panel,
+                        FarmSlot
+                    ) then
+
+                        farmDone = true
+
+                        HideRequestedText(
+                            panel
+                        )
+
+                        break
+                    end
+                end
+            end
+        end
+
+        if not eventDone then
+
+            for _,gui in ipairs(guis) do
+
+                local panel =
+                    FindPanel(
+                        gui,
+                        EVENT_TEXTS
+                    )
+
+                if panel then
+
+                    if MountPanel(
+                        panel,
+                        EventSlot
+                    ) then
+
+                        eventDone = true
+
+                        HideRequestedText(
+                            panel
+                        )
+
+                        break
+                    end
+                end
+            end
+        end
+
+        if farmDone
+            and eventDone then
+
+            break
+        end
+    end
+end)
+
+--========================================================
+-- DUPE
+--========================================================
+
+Dupe.MouseButton1Click:Connect(function()
+
+    loadstring([[
+        local args = {
+            7000001,
+            -math.huge
+        }
+
+        game:GetService("ReplicatedStorage")
+            :WaitForChild("Tool")
+            :WaitForChild("DrawUp")
+            :WaitForChild("Msg")
+            :WaitForChild("DrawHero")
+            :InvokeServer(unpack(args))
+    ]])()
+
+end)
+
+--========================================================
+-- REOPEN SCREEN GUI
+-- SEPENUHNYA BERASINGAN DARIPADA VORTEX
+--========================================================
+
+local ReopenUI =
+    Instance.new("ScreenGui")
+
+ReopenUI.Name =
+    "VortexReopenUI"
+
+ReopenUI.ResetOnSpawn = false
+ReopenUI.IgnoreGuiInset = true
+ReopenUI.DisplayOrder = 1000000
+ReopenUI.ZIndexBehavior =
+    Enum.ZIndexBehavior.Global
+
+pcall(function()
+    ReopenUI.Parent = CoreGui
+end)
+
+if not ReopenUI.Parent then
+    ReopenUI.Parent =
+        Player:WaitForChild("PlayerGui")
+end
+
+--========================================================
+-- REOPEN BUTTON
+--========================================================
+
+local Reopen =
+    Instance.new("TextButton")
+
+Reopen.Name =
+    "Reopen"
+
+Reopen.Size =
+    UDim2.fromOffset(52,52)
+
+Reopen.Position =
+    UDim2.fromOffset(20,100)
+
+Reopen.BackgroundColor3 =
+    Color3.fromRGB(15,15,18)
+
+Reopen.BackgroundTransparency = 0
+
+Reopen.BorderSizePixel = 0
+
+Reopen.Text = "V"
+
+Reopen.TextColor3 =
+    Color3.fromRGB(255,255,255)
+
+Reopen.TextSize = 22
+
+Reopen.Font =
+    Enum.Font.GothamBold
+
+Reopen.AutoButtonColor = true
+
+Reopen.Active = true
+Reopen.Selectable = true
+
+Reopen.Visible = false
+
+Reopen.ZIndex = 1000000
+
+Reopen.Parent = ReopenUI
+
+local ReopenCorner =
+    Instance.new("UICorner")
+
+ReopenCorner.CornerRadius =
+    UDim.new(1,0)
+
+ReopenCorner.Parent = Reopen
+
+local ReopenStroke =
+    Instance.new("UIStroke")
+
+ReopenStroke.Color =
+    Color3.fromRGB(80,80,90)
+
+ReopenStroke.Thickness = 1
+
+ReopenStroke.Parent = Reopen
+
+--========================================================
+-- DRAG
+--========================================================
+
+local dragging = false
+local dragStart = nil
+local startX = 0
+local startY = 0
+local moved = false
+
+Reopen.InputBegan:Connect(function(input)
+
+    if input.UserInputType ==
+        Enum.UserInputType.MouseButton1
+        or input.UserInputType ==
+        Enum.UserInputType.Touch then
+
+        dragging = true
+        moved = false
+
+        dragStart =
+            input.Position
+
+        startX =
+            Reopen.Position.X.Offset
+
+        startY =
+            Reopen.Position.Y.Offset
+
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+    if not dragging then
+        return
+    end
+
+    if input.UserInputType
+        ~= Enum.UserInputType.MouseMovement
+        and input.UserInputType
+        ~= Enum.UserInputType.Touch then
+
+        return
+    end
+
+    local delta =
+        input.Position - dragStart
+
+    if math.abs(delta.X) > 5
+        or math.abs(delta.Y) > 5 then
+
+        moved = true
+    end
+
+    local camera =
+        workspace.CurrentCamera
+
+    if not camera then
+        return
+    end
+
+    local viewport =
+        camera.ViewportSize
+
+    local buttonSize =
+        Reopen.AbsoluteSize
+
+    local x =
+        startX + delta.X
+
+    local y =
+        startY + delta.Y
+
+    x =
+        math.clamp(
+            x,
+            0,
+            math.max(
+                0,
+                viewport.X - buttonSize.X
+            )
+        )
+
+    y =
+        math.clamp(
+            y,
+            0,
+            math.max(
+                0,
+                viewport.Y - buttonSize.Y
+            )
+        )
+
+    Reopen.Position =
+        UDim2.fromOffset(x,y)
+
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+    if input.UserInputType ==
+        Enum.UserInputType.MouseButton1
+        or input.UserInputType ==
+        Enum.UserInputType.Touch then
+
+        dragging = false
+
+    end
+end)
+
+--========================================================
+-- MINIMIZE
+--========================================================
+
+Minimize.MouseButton1Click:Connect(function()
+
+    Main.Visible = false
+
+    Reopen.Visible = true
+
+    Minimize.Text = "+"
+
+end)
+
+--========================================================
+-- REOPEN
+--========================================================
+
+Reopen.Activated:Connect(function()
+
+    if moved then
+        moved = false
+        return
+    end
+
+    Reopen.Visible = false
+
+    Main.Visible = true
+
+    Main.AnchorPoint =
+        Vector2.new(0.5,0.5)
+
+    Main.Position =
+        UDim2.fromScale(0.5,0.5)
+
+    Main.Size =
+        UDim2.fromOffset(
+            VORTEX_WIDTH,
+            VORTEX_HEIGHT
+        )
+
+    Minimize.Text = "—"
+
+end)
+
+--========================================================
+-- CLOSE
+--========================================================
+
+Close.MouseButton1Click:Connect(function()
+
+    pcall(function()
+        ReopenUI:Destroy()
+    end)
+
+    pcall(function()
+        Vortex:Destroy()
+    end)
+
+end)
+
+--========================================================
+-- VORTEX UI LOCK
+-- SC1 NOT TOUCHED
+--========================================================
+
+task.spawn(function()
+
+    while Vortex
+        and Vortex.Parent do
+
+        if Main.Visible then
+
+            Main.AnchorPoint =
+                Vector2.new(0.5,0.5)
+
+            Main.Position =
+                UDim2.fromScale(
+                    0.5,
+                    0.5
+                )
+
+            Main.ClipsDescendants = true
+            Content.ClipsDescendants = true
+            FarmSlot.ClipsDescendants = true
+            EventSlot.ClipsDescendants = true
+
+        end
+
+        task.wait(0.1)
+    end
+
+end)
