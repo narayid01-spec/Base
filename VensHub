@@ -37,11 +37,9 @@ __VHP_CHECK()
 
 --========================================================
 -- VensHub | Ride a Pet
--- FULL BUILD
--- NOCLIP MOVED TO AUTO CATEGORY
--- AUTO EGG + AUTO INSTANT
--- UI OPTIMIZED
--- MAIN GUI: 555x375
+-- UI CLEAN BUILD
+-- SYSTEMS UNCHANGED
+-- NOCLIP REMAINS IN AUTO
 --========================================================
 
 if getgenv().VensHubLoaded then
@@ -179,23 +177,25 @@ end
 --========================================================
 
 local C = {
-    Black = Color3.fromRGB(7, 6, 10),
-    Panel = Color3.fromRGB(12, 11, 17),
-    Panel2 = Color3.fromRGB(18, 17, 24),
+    Black = Color3.fromRGB(6, 5, 9),
 
-    Button = Color3.fromRGB(21, 19, 28),
-    Selected = Color3.fromRGB(79, 31, 119),
-    Hover = Color3.fromRGB(43, 27, 62),
+    Panel = Color3.fromRGB(11, 10, 16),
+    Panel2 = Color3.fromRGB(17, 15, 23),
+    Panel3 = Color3.fromRGB(22, 19, 30),
 
-    Purple = Color3.fromRGB(126, 52, 210),
-    PurpleText = Color3.fromRGB(193, 132, 255),
+    Button = Color3.fromRGB(20, 18, 27),
+    Selected = Color3.fromRGB(88, 37, 132),
+    Hover = Color3.fromRGB(45, 29, 64),
 
-    White = Color3.fromRGB(245, 245, 250),
-    Gray = Color3.fromRGB(145, 140, 155),
+    Purple = Color3.fromRGB(142, 61, 225),
+    PurpleText = Color3.fromRGB(201, 146, 255),
+
+    White = Color3.fromRGB(246, 244, 250),
+    Gray = Color3.fromRGB(145, 139, 158),
+    LightGray = Color3.fromRGB(190, 184, 202),
 
     Green = Color3.fromRGB(85, 220, 125),
     Red = Color3.fromRGB(235, 75, 85),
-
     Yellow = Color3.fromRGB(255, 205, 55),
 }
 
@@ -286,7 +286,7 @@ local function Button(parent, text, size, position)
     object.Size = size
     object.Position = position
     object.BackgroundColor3 = C.Button
-    object.BackgroundTransparency = 0.04
+    object.BackgroundTransparency = 0.02
     object.BorderSizePixel = 0
     object.Text = text
     object.TextColor3 = C.White
@@ -298,13 +298,13 @@ local function Button(parent, text, size, position)
     object.ZIndex = 30
     object.Parent = parent
 
-    Corner(object, 8)
+    Corner(object, 9)
 
     local outline = Stroke(
         object,
-        Color3.fromRGB(48, 42, 60),
+        Color3.fromRGB(55, 47, 68),
         1,
-        0.25
+        0.18
     )
 
     Connect(object.MouseEnter, function()
@@ -312,7 +312,7 @@ local function Button(parent, text, size, position)
             and object.BackgroundColor3 ~= C.Selected then
 
             object.BackgroundColor3 = C.Hover
-            outline.Transparency = 0.05
+            outline.Transparency = 0.02
         end
     end)
 
@@ -321,7 +321,7 @@ local function Button(parent, text, size, position)
             and object.BackgroundColor3 ~= C.Selected then
 
             object.BackgroundColor3 = C.Button
-            outline.Transparency = 0.25
+            outline.Transparency = 0.18
         end
     end)
 
@@ -350,8 +350,8 @@ local function Input(parent, placeholder, value)
     local object = Instance.new("TextBox")
 
     object.Size = UDim2.fromOffset(100, 30)
-    object.BackgroundColor3 = C.Panel2
-    object.BackgroundTransparency = 0.04
+    object.BackgroundColor3 = C.Panel3
+    object.BackgroundTransparency = 0.02
     object.BorderSizePixel = 0
     object.PlaceholderText = placeholder
     object.PlaceholderColor3 = C.Gray
@@ -363,12 +363,13 @@ local function Input(parent, placeholder, value)
     object.ZIndex = 30
     object.Parent = parent
 
-    Corner(object, 8)
+    Corner(object, 9)
+
     Stroke(
         object,
-        Color3.fromRGB(45, 39, 56),
+        Color3.fromRGB(52, 44, 64),
         1,
-        0.2
+        0.15
     )
 
     return object
@@ -463,7 +464,7 @@ LoadingGlow.Size = UDim2.fromOffset(430, 430)
 LoadingGlow.AnchorPoint = Vector2.new(0.5, 0.5)
 LoadingGlow.Position = UDim2.fromScale(0.5, 0.5)
 LoadingGlow.BackgroundColor3 = C.Purple
-LoadingGlow.BackgroundTransparency = 0.93
+LoadingGlow.BackgroundTransparency = 0.94
 LoadingGlow.BorderSizePixel = 0
 LoadingGlow.ZIndex = 501
 LoadingGlow.Parent = Loading
@@ -476,17 +477,17 @@ LoadingCard.Size = UDim2.fromOffset(360, 335)
 LoadingCard.AnchorPoint = Vector2.new(0.5, 0.5)
 LoadingCard.Position = UDim2.fromScale(0.5, 0.5)
 LoadingCard.BackgroundColor3 = Color3.fromRGB(9, 8, 13)
-LoadingCard.BackgroundTransparency = 0.06
+LoadingCard.BackgroundTransparency = 0.035
 LoadingCard.BorderSizePixel = 0
 LoadingCard.ZIndex = 502
 LoadingCard.Parent = Loading
 
 Corner(LoadingCard, 20)
-Stroke(LoadingCard, C.Purple, 1.5, 0.18)
+Stroke(LoadingCard, C.Purple, 1.5, 0.14)
 
 local LoadingTopLine = Instance.new("Frame")
 
-LoadingTopLine.Size = UDim2.fromOffset(70, 3)
+LoadingTopLine.Size = UDim2.fromOffset(82, 3)
 LoadingTopLine.AnchorPoint = Vector2.new(0.5, 0)
 LoadingTopLine.Position = UDim2.new(0.5, 0, 0, 13)
 LoadingTopLine.BackgroundColor3 = C.Purple
@@ -502,13 +503,13 @@ LoadingImageFrame.Size = UDim2.fromOffset(112, 112)
 LoadingImageFrame.AnchorPoint = Vector2.new(0.5, 0)
 LoadingImageFrame.Position = UDim2.new(0.5, 0, 0, 28)
 LoadingImageFrame.BackgroundColor3 = Color3.fromRGB(18, 14, 25)
-LoadingImageFrame.BackgroundTransparency = 0.02
+LoadingImageFrame.BackgroundTransparency = 0
 LoadingImageFrame.BorderSizePixel = 0
 LoadingImageFrame.ZIndex = 503
 LoadingImageFrame.Parent = LoadingCard
 
 Corner(LoadingImageFrame, 18)
-Stroke(LoadingImageFrame, C.Purple, 1, 0.25)
+Stroke(LoadingImageFrame, C.Purple, 1, 0.2)
 
 local LoadingImage = Instance.new("ImageLabel")
 
@@ -527,7 +528,7 @@ local LoadingImageShade = Instance.new("Frame")
 
 LoadingImageShade.Size = UDim2.fromScale(1, 1)
 LoadingImageShade.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-LoadingImageShade.BackgroundTransparency = 0.55
+LoadingImageShade.BackgroundTransparency = 0.52
 LoadingImageShade.BorderSizePixel = 0
 LoadingImageShade.ZIndex = 505
 LoadingImageShade.Parent = LoadingImageFrame
@@ -724,20 +725,20 @@ Main.Name = "Main"
 Main.Size = UDim2.fromOffset(555, 375)
 Main.Position = UDim2.new(0.5, -277, 0.5, -187)
 Main.BackgroundColor3 = C.Black
-Main.BackgroundTransparency = 0.06
+Main.BackgroundTransparency = 0.045
 Main.BorderSizePixel = 0
 Main.ZIndex = 10
 Main.Parent = ScreenGui
 
 Corner(Main, 18)
-Stroke(Main, C.Purple, 2, 0.08)
+Stroke(Main, C.Purple, 2, 0.06)
 
 local MainBackground = Instance.new("ImageLabel")
 
 MainBackground.Size = UDim2.fromScale(1, 1)
 MainBackground.BackgroundTransparency = 1
 MainBackground.Image = BACKGROUND_IMAGE
-MainBackground.ImageTransparency = 0.22
+MainBackground.ImageTransparency = 0.27
 MainBackground.ScaleType = Enum.ScaleType.Crop
 MainBackground.ZIndex = 11
 MainBackground.Parent = Main
@@ -748,7 +749,7 @@ local MainOverlay = Instance.new("Frame")
 
 MainOverlay.Size = UDim2.fromScale(1, 1)
 MainOverlay.BackgroundColor3 = Color3.fromRGB(3, 2, 7)
-MainOverlay.BackgroundTransparency = 0.74
+MainOverlay.BackgroundTransparency = 0.72
 MainOverlay.BorderSizePixel = 0
 MainOverlay.ZIndex = 12
 MainOverlay.Parent = Main
@@ -763,15 +764,31 @@ local Header = Instance.new("Frame")
 
 Header.Size = UDim2.new(1, -24, 0, 59)
 Header.Position = UDim2.fromOffset(12, 7)
-Header.BackgroundTransparency = 1
+Header.BackgroundColor3 = C.Panel
+Header.BackgroundTransparency = 0.12
+Header.BorderSizePixel = 0
 Header.ZIndex = 20
 Header.Parent = Main
+
+Corner(Header, 13)
+Stroke(Header, Color3.fromRGB(48, 39, 60), 1, 0.28)
+
+local HeaderAccent = Instance.new("Frame")
+
+HeaderAccent.Size = UDim2.fromOffset(4, 38)
+HeaderAccent.Position = UDim2.fromOffset(8, 10)
+HeaderAccent.BackgroundColor3 = C.Purple
+HeaderAccent.BorderSizePixel = 0
+HeaderAccent.ZIndex = 23
+HeaderAccent.Parent = Header
+
+Corner(HeaderAccent, 4)
 
 local Title = Label(
     Header,
     HUB_NAME,
     UDim2.fromOffset(140, 29),
-    UDim2.fromOffset(8, 1),
+    UDim2.fromOffset(19, 1),
     24,
     C.White
 )
@@ -782,7 +799,7 @@ local Admin = Label(
     Header,
     "ADMIN",
     UDim2.fromOffset(58, 21),
-    UDim2.fromOffset(147, 5),
+    UDim2.fromOffset(158, 5),
     10,
     Color3.fromRGB(35, 27, 5)
 )
@@ -798,7 +815,7 @@ local Subtitle = Label(
     Header,
     GAME_NAME,
     UDim2.fromOffset(180, 19),
-    UDim2.fromOffset(9, 33),
+    UDim2.fromOffset(20, 33),
     12,
     C.PurpleText
 )
@@ -806,28 +823,28 @@ local Subtitle = Label(
 local HideButton = Instance.new("ImageButton")
 
 HideButton.Size = UDim2.fromOffset(40, 40)
-HideButton.Position = UDim2.new(1, -44, 0, 5)
-HideButton.BackgroundColor3 = C.Panel2
-HideButton.BackgroundTransparency = 0.05
+HideButton.Position = UDim2.new(1, -44, 0, 9)
+HideButton.BackgroundColor3 = C.Panel3
+HideButton.BackgroundTransparency = 0.02
 HideButton.Image = BACKGROUND_IMAGE
-HideButton.ImageTransparency = 0.08
+HideButton.ImageTransparency = 0.1
 HideButton.AutoButtonColor = false
 HideButton.ZIndex = 40
 HideButton.Parent = Header
 
-Corner(HideButton, 10)
-Stroke(HideButton, C.Purple, 1, 0.2)
+Corner(HideButton, 11)
+Stroke(HideButton, C.Purple, 1, 0.16)
 
 local HideOverlay = Instance.new("Frame")
 
 HideOverlay.Size = UDim2.fromScale(1, 1)
 HideOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-HideOverlay.BackgroundTransparency = 0.30
+HideOverlay.BackgroundTransparency = 0.32
 HideOverlay.BorderSizePixel = 0
 HideOverlay.ZIndex = 41
 HideOverlay.Parent = HideButton
 
-Corner(HideOverlay, 10)
+Corner(HideOverlay, 11)
 
 local HideText = Label(
     HideButton,
@@ -851,7 +868,7 @@ local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.fromOffset(183, 292)
 Sidebar.Position = UDim2.fromOffset(12, 73)
 Sidebar.BackgroundColor3 = C.Panel
-Sidebar.BackgroundTransparency = 0.04
+Sidebar.BackgroundTransparency = 0.02
 Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 20
 Sidebar.Parent = Main
@@ -859,17 +876,28 @@ Sidebar.Parent = Main
 Corner(Sidebar, 13)
 Stroke(
     Sidebar,
-    Color3.fromRGB(45, 38, 58),
+    Color3.fromRGB(47, 39, 59),
     1,
-    0.25
+    0.2
 )
+
+local SidebarTitle = Label(
+    Sidebar,
+    "MENU",
+    UDim2.new(1, -24, 0, 17),
+    UDim2.fromOffset(12, 7),
+    9,
+    C.Gray
+)
+
+SidebarTitle.Font = Enum.Font.GothamBold
 
 local Content = Instance.new("Frame")
 
 Content.Size = UDim2.fromOffset(348, 292)
 Content.Position = UDim2.fromOffset(195, 73)
 Content.BackgroundColor3 = C.Panel
-Content.BackgroundTransparency = 0.04
+Content.BackgroundTransparency = 0.02
 Content.BorderSizePixel = 0
 Content.ClipsDescendants = true
 Content.ZIndex = 20
@@ -878,10 +906,21 @@ Content.Parent = Main
 Corner(Content, 13)
 Stroke(
     Content,
-    Color3.fromRGB(45, 38, 58),
+    Color3.fromRGB(47, 39, 59),
     1,
-    0.25
+    0.2
 )
+
+local ContentAccent = Instance.new("Frame")
+
+ContentAccent.Size = UDim2.fromOffset(3, 34)
+ContentAccent.Position = UDim2.fromOffset(0, 8)
+ContentAccent.BackgroundColor3 = C.Purple
+ContentAccent.BorderSizePixel = 0
+ContentAccent.ZIndex = 22
+ContentAccent.Parent = Content
+
+Corner(ContentAccent, 3)
 
 local Pages = {}
 local Tabs = {}
@@ -900,14 +939,20 @@ for i, name in ipairs(TabNames) do
     local tab = Button(
         Sidebar,
         name,
-        UDim2.new(1, -14, 0, 34),
+        UDim2.new(1, -16, 0, 32),
         UDim2.fromOffset(
-            7,
-            8 + ((i - 1) * 39)
+            8,
+            28 + ((i - 1) * 37)
         )
     )
 
-    tab.TextSize = 12
+    tab.TextSize = 11
+    tab.TextXAlignment = Enum.TextXAlignment.Left
+
+    local tabPadding = Instance.new("UIPadding")
+    tabPadding.PaddingLeft = UDim.new(0, 12)
+    tabPadding.Parent = tab
+
     Tabs[name] = tab
 
     local page = Instance.new("Frame")
@@ -976,18 +1021,27 @@ local function PageHeader(page, title, subtitle)
         page,
         title,
         UDim2.new(1, -24, 0, 26),
-        UDim2.fromOffset(12, 8),
+        UDim2.fromOffset(17, 8),
         18,
         C.White
     )
 
     titleLabel.Font = Enum.Font.GothamBold
 
+    local accent = Instance.new("Frame")
+    accent.Size = UDim2.fromOffset(3, 20)
+    accent.Position = UDim2.fromOffset(12, 11)
+    accent.BackgroundColor3 = C.Purple
+    accent.BorderSizePixel = 0
+    accent.ZIndex = 25
+    accent.Parent = page
+    Corner(accent, 3)
+
     Label(
         page,
         subtitle,
         UDim2.new(1, -24, 0, 17),
-        UDim2.fromOffset(13, 34),
+        UDim2.fromOffset(18, 35),
         9,
         C.Gray
     )
@@ -1011,18 +1065,35 @@ local function DashRow(text, y, color)
     row.Size = UDim2.new(1, -24, 0, 34)
     row.Position = UDim2.fromOffset(12, y)
     row.BackgroundColor3 = C.Panel2
-    row.BackgroundTransparency = 0.04
+    row.BackgroundTransparency = 0.015
     row.BorderSizePixel = 0
     row.ZIndex = 23
     row.Parent = Dashboard
 
-    Corner(row, 8)
+    Corner(row, 9)
+
+    Stroke(
+        row,
+        Color3.fromRGB(47, 39, 59),
+        1,
+        0.5
+    )
+
+    local indicator = Instance.new("Frame")
+    indicator.Size = UDim2.fromOffset(3, 18)
+    indicator.Position = UDim2.fromOffset(8, 8)
+    indicator.BackgroundColor3 = color or C.Purple
+    indicator.BorderSizePixel = 0
+    indicator.ZIndex = 24
+    indicator.Parent = row
+
+    Corner(indicator, 3)
 
     return Label(
         row,
         text,
-        UDim2.new(1, -16, 1, 0),
-        UDim2.fromOffset(8, 0),
+        UDim2.new(1, -26, 1, 0),
+        UDim2.fromOffset(18, 0),
         10,
         color or C.White
     )
@@ -1091,8 +1162,8 @@ local EggList = Instance.new("ScrollingFrame")
 
 EggList.Size = UDim2.new(1, -24, 0, 91)
 EggList.Position = UDim2.fromOffset(12, 76)
-EggList.BackgroundColor3 = Color3.fromRGB(11, 10, 16)
-EggList.BackgroundTransparency = 0.02
+EggList.BackgroundColor3 = Color3.fromRGB(9, 8, 14)
+EggList.BackgroundTransparency = 0
 EggList.BorderSizePixel = 0
 EggList.ScrollBarThickness = 3
 EggList.ScrollBarImageColor3 = C.Purple
@@ -1101,7 +1172,8 @@ EggList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 EggList.ZIndex = 25
 EggList.Parent = TravelPage
 
-Corner(EggList, 8)
+Corner(EggList, 9)
+Stroke(EggList, Color3.fromRGB(47, 39, 59), 1, 0.35)
 
 local EggPadding = Instance.new("UIPadding")
 
@@ -1187,7 +1259,6 @@ local ClearTargetTravel =
 
 --========================================================
 -- AUTO PAGE
--- NOCLIP MOVED HERE
 --========================================================
 
 local AutoPage = Pages["Auto"]
@@ -1282,10 +1353,6 @@ local AutoStopButton =
 AutoStopButton.TextSize = 9
 AutoStopButton.Font = Enum.Font.GothamBold
 
---========================================================
--- NOCLIP BUTTON MOVED TO AUTO
---========================================================
-
 local NoclipButton =
     Button(
         AutoPage,
@@ -1326,14 +1393,23 @@ AutoSelector.Active = true
 AutoSelector.Parent = AutoPage
 
 Corner(AutoSelector, 14)
-Stroke(AutoSelector, C.Purple, 1.4, 0.12)
+Stroke(AutoSelector, C.Purple, 1.4, 0.08)
+
+local SelectorAccent = Instance.new("Frame")
+SelectorAccent.Size = UDim2.fromOffset(3, 28)
+SelectorAccent.Position = UDim2.fromOffset(9, 8)
+SelectorAccent.BackgroundColor3 = C.Purple
+SelectorAccent.BorderSizePixel = 0
+SelectorAccent.ZIndex = 83
+SelectorAccent.Parent = AutoSelector
+Corner(SelectorAccent, 3)
 
 local SelectorTitle =
     Label(
         AutoSelector,
         "SELECT EGG",
         UDim2.new(1, -75, 0, 27),
-        UDim2.fromOffset(14, 8),
+        UDim2.fromOffset(18, 8),
         15,
         C.White
     )
@@ -1346,7 +1422,7 @@ local SelectorSubtitle =
         AutoSelector,
         "Egg types found beyond 500 studs",
         UDim2.new(1, -75, 0, 18),
-        UDim2.fromOffset(14, 34),
+        UDim2.fromOffset(18, 34),
         8,
         C.Gray
     )
@@ -1413,6 +1489,7 @@ SelectorList.ZIndex = 82
 SelectorList.Parent = AutoSelector
 
 Corner(SelectorList, 9)
+Stroke(SelectorList, Color3.fromRGB(45, 38, 56), 1, 0.35)
 
 local SelectorPadding = Instance.new("UIPadding")
 
@@ -1464,7 +1541,6 @@ end
 
 --========================================================
 -- MOVEMENT PAGE
--- NO NOCLIP HERE
 --========================================================
 
 local MovementPage = Pages["Movement"]
@@ -1661,18 +1737,18 @@ local UpdateBox = Instance.new("Frame")
 UpdateBox.Size = UDim2.new(1, -24, 0, 183)
 UpdateBox.Position = UDim2.fromOffset(12, 64)
 UpdateBox.BackgroundColor3 = C.Panel2
-UpdateBox.BackgroundTransparency = 0.04
+UpdateBox.BackgroundTransparency = 0.015
 UpdateBox.BorderSizePixel = 0
 UpdateBox.ZIndex = 23
 UpdateBox.Parent = UpdatePage
 
-Corner(UpdateBox, 9)
+Corner(UpdateBox, 10)
 
 Stroke(
     UpdateBox,
-    Color3.fromRGB(45, 38, 58),
+    Color3.fromRGB(47, 39, 59),
     1,
-    0.25
+    0.35
 )
 
 local UpdateText = Label(
@@ -1904,7 +1980,6 @@ local function ScanEggs()
                 local distance =
                     (position - root.Position).Magnitude
 
-                -- STRICTLY > 500 STUDS
                 if distance > MIN_SCAN_DISTANCE then
                     local physicalKey = object
 
@@ -2072,13 +2147,21 @@ local function AddEggRow(egg)
     button.BackgroundColor3 =
         C.Button
 
+    button.BackgroundTransparency = 0.02
     button.BorderSizePixel = 0
     button.Text = ""
     button.AutoButtonColor = false
     button.ZIndex = 30
     button.Parent = EggList
 
-    Corner(button, 6)
+    Corner(button, 7)
+
+    Stroke(
+        button,
+        Color3.fromRGB(48, 42, 60),
+        1,
+        0.5
+    )
 
     local name =
         Label(
@@ -3106,8 +3189,6 @@ end
 RebuildAutoNames = function()
     local names = {}
 
-    -- Current scanned egg names only.
-    -- Same normalized name = one selector row.
     for _, egg in ipairs(State.Eggs) do
         local key =
             NormalizeName(
@@ -3228,8 +3309,8 @@ RefreshAutoSelector = function()
                 ),
                 1,
                 selected
-                and 0.15
-                or 0.55
+                and 0.12
+                or 0.5
             )
 
             local checkBox =
@@ -3687,7 +3768,6 @@ Connect(
 
 --========================================================
 -- NOCLIP
--- NOW LOCATED UNDER AUTO
 --========================================================
 
 Connect(
@@ -4169,7 +4249,7 @@ Reopen.BackgroundColor3 =
     C.Panel
 
 Reopen.BackgroundTransparency =
-    0.04
+    0.02
 
 Reopen.Image =
     BACKGROUND_IMAGE
