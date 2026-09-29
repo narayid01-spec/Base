@@ -1,76 +1,28 @@
 --========================================================
 -- VensHub | Ride a Pet
--- FULL BUILD • CLEAN REBUILD
--- UI: 555x375
--- Feedback replaced with SESSION / ACTIVITY system
+-- FULL SC - FAST LOADING + MAIN GUI FIX
+-- GUI SIZE: 555x375
 --========================================================
 
--- [VensHub Protection]
--- -protect by Damzz
-local __VHP = {}
-__VHP.__sig = "VensHub|Ride a Pet|Damzz"
-__VHP.__name = "VensHub"
-__VHP.__game = "Ride a Pet"
-__VHP.__owner = "Damzz"
-__VHP.__version = "PROTECTED"
+local ENV = (typeof(getgenv) == "function" and getgenv()) or _G
 
-local function __VHP_FAIL(reason)
-    error("[VensHub Protection] " .. tostring(reason), 0)
-end
-
-local function __VHP_CHECK()
-    if type(__VHP) ~= "table" then
-        __VHP_FAIL("Protection object modified")
-    end
-
-    if __VHP.__sig ~= "VensHub|Ride a Pet|Damzz" then
-        __VHP_FAIL("Ownership signature modified")
-    end
-
-    if __VHP.__name ~= "VensHub" then
-        __VHP_FAIL("Hub name modified")
-    end
-
-    if __VHP.__game ~= "Ride a Pet" then
-        __VHP_FAIL("Game identity modified")
-    end
-
-    if __VHP.__owner ~= "Damzz" then
-        __VHP_FAIL("Copyright owner modified")
-    end
-
-    if __VHP.__version ~= "PROTECTED" then
-        __VHP_FAIL("Protection version modified")
-    end
-end
-
-__VHP_CHECK()
--- [End VensHub Protection]
-
-
---========================================================
--- CLEAN OLD VERSION
---========================================================
-
-local ENV = getgenv and getgenv() or _G
-
-if ENV.VensHubConnections then
-    for _, connection in ipairs(ENV.VensHubConnections) do
-        pcall(function()
-            connection:Disconnect()
-        end)
-    end
-end
-
-if ENV.VensHubGUI then
+if ENV.VensHubLoaded then
     pcall(function()
-        ENV.VensHubGUI:Destroy()
+        if ENV.VensHubConnections then
+            for _, c in ipairs(ENV.VensHubConnections) do
+                pcall(function()
+                    c:Disconnect()
+                end)
+            end
+        end
+
+        if ENV.VensHubGUI then
+            ENV.VensHubGUI:Destroy()
+        end
     end)
 end
 
 ENV.VensHubLoaded = true
-ENV.VensHubConnections = {}
-
 
 --========================================================
 -- SERVICES
@@ -81,10 +33,8 @@ local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
-local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
-
 
 --========================================================
 -- CONFIG
@@ -92,9 +42,6 @@ local LocalPlayer = Players.LocalPlayer
 
 local HUB_NAME = "VensHub"
 local GAME_NAME = "Ride a Pet"
-
-local GUI_WIDTH = 555
-local GUI_HEIGHT = 375
 
 local BACKGROUND_IMAGE =
     "rbxthumb://type=Asset&id=969784647&w=420&h=420"
@@ -104,12 +51,7 @@ local WHATSAPP =
 
 local MIN_SCAN_DISTANCE = 500
 local SCAN_INTERVAL = 1.5
-
-local ACTIVITY_LIMIT = 80
-
-local ACTIVITY_FILE =
-    "VensHub_RideAPet_Activity.json"
-
+local UI_UPDATE_INTERVAL = 0.5
 
 --========================================================
 -- COLORS
@@ -117,13 +59,12 @@ local ACTIVITY_FILE =
 
 local C = {
     Black = Color3.fromRGB(7, 6, 10),
-
     Panel = Color3.fromRGB(12, 11, 17),
     Panel2 = Color3.fromRGB(18, 17, 24),
 
     Button = Color3.fromRGB(21, 19, 28),
-    Hover = Color3.fromRGB(43, 27, 62),
     Selected = Color3.fromRGB(79, 31, 119),
+    Hover = Color3.fromRGB(43, 27, 62),
 
     Purple = Color3.fromRGB(126, 52, 210),
     PurpleText = Color3.fromRGB(193, 132, 255),
@@ -134,9 +75,7 @@ local C = {
     Green = Color3.fromRGB(85, 220, 125),
     Red = Color3.fromRGB(235, 75, 85),
     Yellow = Color3.fromRGB(255, 205, 55),
-    Orange = Color3.fromRGB(255, 150, 65),
 }
-
 
 --========================================================
 -- STATE
@@ -150,6 +89,7 @@ local State = {
     Spawn = nil,
 
     Eggs = {},
+    EggMap = {},
     EggCandidates = {},
 
     SelectedEgg = nil,
@@ -163,10 +103,10 @@ local State = {
     AutoEgg = false,
     AutoInstant = false,
 
+    ESP = false,
     Noclip = false,
     Fly = false,
     AntiAFK = false,
-    ESP = false,
 
     WalkSpeed = 16,
     JumpPower = 50,
@@ -177,34 +117,23 @@ local State = {
     TravelToken = 0,
     AutoToken = 0,
 
+    LastScanSignature = "",
+
     GUIHidden = false,
-
-    Activity = {},
-
-    SessionStart = os.time(),
-
-    ScanCount = 0,
-    TravelCount = 0,
-    AutoCount = 0,
-    InstantCount = 0,
-    InteractionCount = 0,
-
-    LastStatus = "Ready",
 }
 
-
---========================================================
--- CONNECTIONS
---========================================================
-
-local Connections = ENV.VensHubConnections
+local Connections = {}
+ENV.VensHubConnections = Connections
 
 local function Connect(signal, callback)
+    if not signal then
+        return nil
+    end
+
     local connection = signal:Connect(callback)
     table.insert(Connections, connection)
     return connection
 end
-
 
 --========================================================
 -- GUI PARENT
@@ -213,7 +142,7 @@ end
 local GuiParent
 
 pcall(function()
-    if gethui then
+    if typeof(gethui) == "function" then
         GuiParent = gethui()
     end
 end)
@@ -222,59 +151,89 @@ if not GuiParent then
     GuiParent = LocalPlayer:WaitForChild("PlayerGui")
 end
 
+--========================================================
+-- CHARACTER
+--========================================================
+
+local function UpdateCharacter()
+    local character = LocalPlayer.Character
+
+    if not character then
+        return
+    end
+
+    State.Character = character
+    State.Humanoid = character:FindFirstChildOfClass("Humanoid")
+    State.Root = character:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetRoot()
+    if not State.Character
+        or not State.Character.Parent
+        or not State.Root
+        or not State.Root.Parent then
+
+        UpdateCharacter()
+    end
+
+    return State.Root
+end
+
+local function SaveSpawn()
+    local root = GetRoot()
+
+    if root then
+        State.Spawn = root.CFrame
+        return true
+    end
+
+    return false
+end
+
+UpdateCharacter()
+SaveSpawn()
 
 --========================================================
--- HELPERS
+-- UI HELPERS
 --========================================================
 
 local function Corner(object, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 8)
-    c.Parent = object
-    return c
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius or 8)
+    corner.Parent = object
+    return corner
 end
-
 
 local function Stroke(object, color, thickness, transparency)
-    local s = Instance.new("UIStroke")
-
-    s.Color = color or C.Purple
-    s.Thickness = thickness or 1
-    s.Transparency = transparency or 0
-
-    s.Parent = object
-
-    return s
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color or C.Purple
+    stroke.Thickness = thickness or 1
+    stroke.Transparency = transparency or 0
+    stroke.Parent = object
+    return stroke
 end
-
 
 local function Label(parent, text, size, position, textSize, color)
     local object = Instance.new("TextLabel")
 
     object.Size = size
     object.Position = position
-
     object.BackgroundTransparency = 1
     object.BorderSizePixel = 0
 
     object.Text = text
     object.TextColor3 = color or C.White
     object.TextSize = textSize or 12
-
     object.Font = Enum.Font.Gotham
 
-    object.TextXAlignment =
-        Enum.TextXAlignment.Left
-
-    object.TextYAlignment =
-        Enum.TextYAlignment.Center
+    object.TextXAlignment = Enum.TextXAlignment.Left
+    object.TextYAlignment = Enum.TextYAlignment.Center
 
     object.ZIndex = 25
     object.Parent = parent
 
     return object
 end
-
 
 local function Button(parent, text, size, position)
     local object = Instance.new("TextButton")
@@ -284,12 +243,10 @@ local function Button(parent, text, size, position)
 
     object.BackgroundColor3 = C.Button
     object.BackgroundTransparency = 0.04
-
     object.BorderSizePixel = 0
 
     object.Text = text
     object.TextColor3 = C.White
-
     object.TextSize = 11
     object.Font = Enum.Font.GothamMedium
 
@@ -311,7 +268,7 @@ local function Button(parent, text, size, position)
 
     Connect(object.MouseEnter, function()
         if object.Parent
-            and object:GetAttribute("VensSelected") ~= true then
+            and object.BackgroundColor3 ~= C.Selected then
 
             object.BackgroundColor3 = C.Hover
             outline.Transparency = 0.05
@@ -320,7 +277,7 @@ local function Button(parent, text, size, position)
 
     Connect(object.MouseLeave, function()
         if object.Parent
-            and object:GetAttribute("VensSelected") ~= true then
+            and object.BackgroundColor3 ~= C.Selected then
 
             object.BackgroundColor3 = C.Button
             outline.Transparency = 0.25
@@ -330,7 +287,6 @@ local function Button(parent, text, size, position)
     return object
 end
 
-
 local function Input(parent, placeholder, value)
     local object = Instance.new("TextBox")
 
@@ -338,74 +294,26 @@ local function Input(parent, placeholder, value)
 
     object.BackgroundColor3 = C.Panel2
     object.BackgroundTransparency = 0.04
-
     object.BorderSizePixel = 0
 
     object.PlaceholderText = placeholder
     object.PlaceholderColor3 = C.Gray
 
     object.Text = value or ""
-
     object.TextColor3 = C.White
+    object.Font = Enum.Font.Gotham
     object.TextSize = 11
 
-    object.Font = Enum.Font.Gotham
-
     object.ClearTextOnFocus = false
-
     object.ZIndex = 30
+
     object.Parent = parent
 
     Corner(object, 8)
-
-    Stroke(
-        object,
-        Color3.fromRGB(45, 39, 56),
-        1,
-        0.2
-    )
+    Stroke(object, Color3.fromRGB(45, 39, 56), 1, 0.2)
 
     return object
 end
-
-
-local function SafeNumber(
-    value,
-    fallback,
-    minimum,
-    maximum
-)
-    local number = tonumber(value)
-
-    if not number then
-        return fallback
-    end
-
-    if minimum then
-        number = math.max(number, minimum)
-    end
-
-    if maximum then
-        number = math.min(number, maximum)
-    end
-
-    return number
-end
-
-
-local function NormalizeName(value)
-    value = tostring(value or "")
-
-    value = value:gsub("[%c]", "")
-    value = value:gsub("%s+", " ")
-
-    value =
-        value:match("^%s*(.-)%s*$")
-        or ""
-
-    return string.lower(value)
-end
-
 
 local function MakeDraggable(object, handle)
     handle = handle or object
@@ -413,752 +321,473 @@ local function MakeDraggable(object, handle)
     local dragging = false
     local dragStart
     local startPosition
-
     local dragInput
 
     Connect(handle.InputBegan, function(input)
-
-        if input.UserInputType ==
-            Enum.UserInputType.MouseButton1
-            or input.UserInputType ==
-            Enum.UserInputType.Touch then
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
 
             dragging = true
-
             dragStart = input.Position
             startPosition = object.Position
-
             dragInput = input
         end
     end)
 
     Connect(handle.InputEnded, function(input)
-
         if input == dragInput then
             dragging = false
         end
     end)
 
     Connect(UIS.InputChanged, function(input)
-
         if not dragging then
             return
         end
 
-        if input.UserInputType ~=
-            Enum.UserInputType.MouseMovement
-            and input.UserInputType ~=
-            Enum.UserInputType.Touch then
-
+        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+            and input.UserInputType ~= Enum.UserInputType.Touch then
             return
         end
 
-        local delta =
-            input.Position - dragStart
+        if not object
+            or not object.Parent
+            or not startPosition
+            or not dragStart then
+            return
+        end
+
+        local delta = input.Position - dragStart
 
         object.Position = UDim2.new(
             startPosition.X.Scale,
             startPosition.X.Offset + delta.X,
-
             startPosition.Y.Scale,
             startPosition.Y.Offset + delta.Y
         )
     end)
 end
 
-
---========================================================
--- CHARACTER
---========================================================
-
-local function UpdateCharacter()
-
-    local character =
-        LocalPlayer.Character
-
-    if not character then
-        return
-    end
-
-    State.Character = character
-
-    State.Humanoid =
-        character:FindFirstChildOfClass(
-            "Humanoid"
-        )
-
-    State.Root =
-        character:FindFirstChild(
-            "HumanoidRootPart"
-        )
-end
-
-
-local function GetRoot()
-
-    if not State.Character
-        or not State.Character.Parent
-        or not State.Root
-        or not State.Root.Parent then
-
-        UpdateCharacter()
-    end
-
-    return State.Root
-end
-
-
-local function SaveSpawn()
-
-    local root = GetRoot()
-
-    if not root then
-        return false
-    end
-
-    State.Spawn = root.CFrame
-
-    return true
-end
-
-
-UpdateCharacter()
-task.wait()
-
-SaveSpawn()
-
-
---========================================================
--- ACTIVITY STORAGE
---========================================================
-
-local function LoadActivity()
-
-    State.Activity = {}
-
-    if not readfile
-        or not isfile then
-
-        return
-    end
-
-    local exists = false
-
-    pcall(function()
-        exists = isfile(ACTIVITY_FILE)
-    end)
-
-    if not exists then
-        return
-    end
-
-    local content
-
-    local success =
-        pcall(function()
-            content =
-                readfile(ACTIVITY_FILE)
-        end)
-
-    if not success
-        or type(content) ~= "string"
-        or content == "" then
-
-        return
-    end
-
-    local decoded
-
-    local decodeSuccess =
-        pcall(function()
-
-            decoded =
-                HttpService:JSONDecode(
-                    content
-                )
-        end)
-
-    if decodeSuccess
-        and type(decoded) == "table" then
-
-        State.Activity = decoded
-    end
-end
-
-
-local function SaveActivity()
-
-    if not writefile then
-        return
-    end
-
-    local encoded
-
-    local success =
-        pcall(function()
-
-            encoded =
-                HttpService:JSONEncode(
-                    State.Activity
-                )
-        end)
-
-    if not success
-        or not encoded then
-
-        return
-    end
-
-    pcall(function()
-        writefile(
-            ACTIVITY_FILE,
-            encoded
-        )
-    end)
-end
-
-
-local function AddActivity(
-    title,
-    detail,
-    kind
-)
-
-    local item = {
-        title = tostring(title or "Activity"),
-        detail = tostring(detail or ""),
-        kind = tostring(kind or "INFO"),
-        time = os.date("%H:%M:%S"),
-        timestamp = os.time(),
-    }
-
-    table.insert(
-        State.Activity,
-        item
-    )
-
-    while #State.Activity >
-        ACTIVITY_LIMIT do
-
-        table.remove(
-            State.Activity,
-            1
-        )
-    end
-
-    SaveActivity()
-end
-
-
-LoadActivity()
-
-
 --========================================================
 -- SCREEN GUI
 --========================================================
 
-local ScreenGui =
-    Instance.new("ScreenGui")
+local ScreenGui = Instance.new("ScreenGui")
 
-ScreenGui.Name =
-    "VensHub_RideAPet"
-
+ScreenGui.Name = "VensHub_RideAPet"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
-
 ScreenGui.DisplayOrder = 999999
-ScreenGui.ZIndexBehavior =
-    Enum.ZIndexBehavior.Global
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+ScreenGui.Enabled = true
 
 ScreenGui.Parent = GuiParent
 
 ENV.VensHubGUI = ScreenGui
 
-
 --========================================================
--- LOADING SCREEN
+-- FAST LOADING SCREEN
 --========================================================
 
-local Loading =
-    Instance.new("Frame")
+local Loading = Instance.new("Frame")
 
-Loading.Size =
-    UDim2.fromScale(1, 1)
-
-Loading.BackgroundColor3 =
-    C.Black
-
+Loading.Size = UDim2.fromScale(1, 1)
+Loading.BackgroundColor3 = C.Black
 Loading.BorderSizePixel = 0
-
 Loading.ZIndex = 500
+
 Loading.Parent = ScreenGui
 
+local LoadingGlow = Instance.new("Frame")
 
-local LoadingCard =
-    Instance.new("Frame")
+LoadingGlow.Size = UDim2.fromOffset(430, 430)
+LoadingGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+LoadingGlow.Position = UDim2.fromScale(0.5, 0.5)
 
-LoadingCard.Size =
-    UDim2.fromOffset(360, 335)
+LoadingGlow.BackgroundColor3 = C.Purple
+LoadingGlow.BackgroundTransparency = 0.93
+LoadingGlow.BorderSizePixel = 0
+LoadingGlow.ZIndex = 501
 
-LoadingCard.AnchorPoint =
-    Vector2.new(0.5, 0.5)
+LoadingGlow.Parent = Loading
+Corner(LoadingGlow, 215)
 
-LoadingCard.Position =
-    UDim2.fromScale(0.5, 0.5)
+local LoadingCard = Instance.new("Frame")
 
-LoadingCard.BackgroundColor3 =
-    Color3.fromRGB(9, 8, 13)
+LoadingCard.Size = UDim2.fromOffset(360, 335)
+LoadingCard.AnchorPoint = Vector2.new(0.5, 0.5)
+LoadingCard.Position = UDim2.fromScale(0.5, 0.5)
 
-LoadingCard.BackgroundTransparency =
-    0.05
-
+LoadingCard.BackgroundColor3 = Color3.fromRGB(9, 8, 13)
+LoadingCard.BackgroundTransparency = 0.06
 LoadingCard.BorderSizePixel = 0
-
 LoadingCard.ZIndex = 502
+
 LoadingCard.Parent = Loading
 
 Corner(LoadingCard, 20)
+Stroke(LoadingCard, C.Purple, 1.5, 0.18)
 
-Stroke(
-    LoadingCard,
-    C.Purple,
-    1.5,
-    0.15
-)
+local LoadingTopLine = Instance.new("Frame")
 
+LoadingTopLine.Size = UDim2.fromOffset(70, 3)
+LoadingTopLine.AnchorPoint = Vector2.new(0.5, 0)
+LoadingTopLine.Position = UDim2.new(0.5, 0, 0, 13)
 
-local LoadingImageFrame =
-    Instance.new("Frame")
+LoadingTopLine.BackgroundColor3 = C.Purple
+LoadingTopLine.BorderSizePixel = 0
+LoadingTopLine.ZIndex = 504
 
-LoadingImageFrame.Size =
-    UDim2.fromOffset(112, 112)
+LoadingTopLine.Parent = LoadingCard
+Corner(LoadingTopLine, 3)
 
-LoadingImageFrame.AnchorPoint =
-    Vector2.new(0.5, 0)
+local LoadingImageFrame = Instance.new("Frame")
 
-LoadingImageFrame.Position =
-    UDim2.new(0.5, 0, 0, 25)
+LoadingImageFrame.Size = UDim2.fromOffset(112, 112)
+LoadingImageFrame.AnchorPoint = Vector2.new(0.5, 0)
+LoadingImageFrame.Position = UDim2.new(0.5, 0, 0, 28)
 
-LoadingImageFrame.BackgroundColor3 =
-    C.Panel2
-
+LoadingImageFrame.BackgroundColor3 = Color3.fromRGB(18, 14, 25)
 LoadingImageFrame.BorderSizePixel = 0
-
 LoadingImageFrame.ZIndex = 503
+
 LoadingImageFrame.Parent = LoadingCard
 
 Corner(LoadingImageFrame, 18)
+Stroke(LoadingImageFrame, C.Purple, 1, 0.25)
 
+local LoadingImage = Instance.new("ImageLabel")
 
-local LoadingImage =
-    Instance.new("ImageLabel")
-
-LoadingImage.Size =
-    UDim2.new(1, -6, 1, -6)
-
-LoadingImage.Position =
-    UDim2.fromOffset(3, 3)
+LoadingImage.Size = UDim2.new(1, -6, 1, -6)
+LoadingImage.Position = UDim2.fromOffset(3, 3)
 
 LoadingImage.BackgroundTransparency = 1
-
-LoadingImage.Image =
-    BACKGROUND_IMAGE
-
-LoadingImage.ImageTransparency = 0.05
-
-LoadingImage.ScaleType =
-    Enum.ScaleType.Crop
-
+LoadingImage.Image = BACKGROUND_IMAGE
+LoadingImage.ImageTransparency = 0.02
+LoadingImage.ScaleType = Enum.ScaleType.Crop
 LoadingImage.ZIndex = 504
-LoadingImage.Parent =
-    LoadingImageFrame
+
+LoadingImage.Parent = LoadingImageFrame
 
 Corner(LoadingImage, 15)
 
+local LoadingImageShade = Instance.new("Frame")
 
-local LoadingTitle =
-    Label(
-        LoadingCard,
-        HUB_NAME,
-        UDim2.new(1, -40, 0, 30),
-        UDim2.fromOffset(20, 148),
-        24,
-        C.White
-    )
+LoadingImageShade.Size = UDim2.fromScale(1, 1)
+LoadingImageShade.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+LoadingImageShade.BackgroundTransparency = 0.45
+LoadingImageShade.BorderSizePixel = 0
+LoadingImageShade.ZIndex = 505
 
-LoadingTitle.TextXAlignment =
-    Enum.TextXAlignment.Center
+LoadingImageShade.Parent = LoadingImageFrame
 
-LoadingTitle.Font =
-    Enum.Font.GothamBold
+Corner(LoadingImageShade, 15)
 
+local LoadingTitle = Label(
+    LoadingCard,
+    HUB_NAME,
+    UDim2.new(1, -40, 0, 32),
+    UDim2.fromOffset(20, 148),
+    23,
+    C.White
+)
 
-local LoadingGame =
-    Label(
-        LoadingCard,
-        GAME_NAME,
-        UDim2.new(1, -40, 0, 20),
-        UDim2.fromOffset(20, 180),
-        12,
-        C.PurpleText
-    )
+LoadingTitle.TextXAlignment = Enum.TextXAlignment.Center
+LoadingTitle.Font = Enum.Font.GothamBold
+LoadingTitle.ZIndex = 504
 
-LoadingGame.TextXAlignment =
-    Enum.TextXAlignment.Center
+local LoadingGame = Label(
+    LoadingCard,
+    GAME_NAME,
+    UDim2.new(1, -40, 0, 20),
+    UDim2.fromOffset(20, 179),
+    11,
+    C.PurpleText
+)
 
+LoadingGame.TextXAlignment = Enum.TextXAlignment.Center
+LoadingGame.ZIndex = 504
 
-local LoadingStatus =
-    Label(
-        LoadingCard,
-        "Preparing VensHub...",
-        UDim2.new(1, -40, 0, 18),
-        UDim2.fromOffset(20, 207),
-        10,
-        C.Gray
-    )
+local LoadingStatus = Label(
+    LoadingCard,
+    "Starting VensHub...",
+    UDim2.new(1, -40, 0, 18),
+    UDim2.fromOffset(20, 207),
+    10,
+    C.Gray
+)
 
-LoadingStatus.TextXAlignment =
-    Enum.TextXAlignment.Center
+LoadingStatus.TextXAlignment = Enum.TextXAlignment.Center
+LoadingStatus.ZIndex = 504
 
+local LoadingBarBG = Instance.new("Frame")
 
-local LoadingBarBG =
-    Instance.new("Frame")
+LoadingBarBG.Size = UDim2.new(1, -54, 0, 7)
+LoadingBarBG.Position = UDim2.fromOffset(27, 238)
 
-LoadingBarBG.Size =
-    UDim2.new(1, -54, 0, 7)
-
-LoadingBarBG.Position =
-    UDim2.fromOffset(27, 238)
-
-LoadingBarBG.BackgroundColor3 =
-    Color3.fromRGB(31, 27, 39)
-
+LoadingBarBG.BackgroundColor3 = Color3.fromRGB(31, 27, 39)
 LoadingBarBG.BorderSizePixel = 0
-
 LoadingBarBG.ZIndex = 504
-LoadingBarBG.Parent = LoadingCard
 
+LoadingBarBG.Parent = LoadingCard
 Corner(LoadingBarBG, 7)
 
+local LoadingBar = Instance.new("Frame")
 
-local LoadingBar =
-    Instance.new("Frame")
-
-LoadingBar.Size =
-    UDim2.new(0, 0, 1, 0)
-
-LoadingBar.BackgroundColor3 =
-    C.Purple
-
+LoadingBar.Size = UDim2.new(0, 0, 1, 0)
+LoadingBar.BackgroundColor3 = C.Purple
 LoadingBar.BorderSizePixel = 0
-
 LoadingBar.ZIndex = 505
-LoadingBar.Parent =
-    LoadingBarBG
 
+LoadingBar.Parent = LoadingBarBG
 Corner(LoadingBar, 7)
 
+local LoadingPercent = Label(
+    LoadingCard,
+    "0%",
+    UDim2.fromOffset(45, 18),
+    UDim2.new(1, -72, 0, 250),
+    9,
+    C.PurpleText
+)
 
+LoadingPercent.TextXAlignment = Enum.TextXAlignment.Right
+LoadingPercent.ZIndex = 505
+
+local WhatsAppButton = Button(
+    LoadingCard,
+    "WHATSAPP CHANNEL",
+    UDim2.fromOffset(190, 34),
+    UDim2.new(0.5, -95, 0, 274)
+)
+
+WhatsAppButton.ZIndex = 505
+
+Connect(WhatsAppButton.Activated, function()
+    if typeof(setclipboard) == "function" then
+        pcall(function()
+            setclipboard(WHATSAPP)
+        end)
+
+        WhatsAppButton.Text = "LINK COPIED"
+
+        task.delay(1.2, function()
+            if WhatsAppButton and WhatsAppButton.Parent then
+                WhatsAppButton.Text = "WHATSAPP CHANNEL"
+            end
+        end)
+    end
+end)
+
+-- FAST LOADING
 task.spawn(function()
 
     local stages = {
-        {0, "Starting VensHub..."},
-        {20, "Building interface..."},
-        {40, "Preparing scanner..."},
-        {60, "Preparing travel..."},
-        {80, "Preparing activity system..."},
+        {25, "Starting VensHub..."},
+        {50, "Loading interface..."},
+        {75, "Preparing systems..."},
         {100, "Ready"},
     }
 
     for _, stage in ipairs(stages) do
-
-        local target =
-            stage[1]
-
-        LoadingStatus.Text =
-            stage[2]
-
-        while
-            math.floor(
-                LoadingBar.Size.X.Scale * 100
-            ) < target
-        do
-
-            local current =
-                math.floor(
-                    LoadingBar.Size.X.Scale * 100
-                )
-
-            current += 2
-
-            LoadingBar.Size =
-                UDim2.new(
-                    current / 100,
-                    0,
-                    1,
-                    0
-                )
-
-            task.wait(0.015)
+        if not Loading.Parent then
+            return
         end
+
+        LoadingStatus.Text = stage[2]
+        LoadingBar.Size = UDim2.new(stage[1] / 100, 0, 1, 0)
+        LoadingPercent.Text = tostring(stage[1]) .. "%"
 
         task.wait(0.06)
     end
 
-    task.wait(0.25)
-
-    TweenService:Create(
+    local fadeCard = TweenService:Create(
         LoadingCard,
-        TweenInfo.new(0.25),
+        TweenInfo.new(
+            0.12,
+            Enum.EasingStyle.Quad,
+            Enum.EasingDirection.In
+        ),
         {
             BackgroundTransparency = 1
         }
-    ):Play()
+    )
 
-    task.wait(0.28)
+    local fadeGlow = TweenService:Create(
+        LoadingGlow,
+        TweenInfo.new(0.12),
+        {
+            BackgroundTransparency = 1
+        }
+    )
 
-    if Loading.Parent then
+    fadeCard:Play()
+    fadeGlow:Play()
+
+    task.wait(0.14)
+
+    if Loading and Loading.Parent then
         Loading:Destroy()
     end
 end)
 
-
 --========================================================
--- MAIN
+-- MAIN GUI
 --========================================================
 
-local Main =
-    Instance.new("Frame")
+local Main = Instance.new("Frame")
 
 Main.Name = "Main"
+Main.Size = UDim2.fromOffset(555, 375)
+Main.Position = UDim2.new(0.5, -277, 0.5, -187)
 
-Main.Size =
-    UDim2.fromOffset(
-        GUI_WIDTH,
-        GUI_HEIGHT
-    )
-
-Main.Position =
-    UDim2.new(
-        0.5,
-        -GUI_WIDTH / 2,
-        0.5,
-        -GUI_HEIGHT / 2
-    )
-
-Main.BackgroundColor3 =
-    C.Black
-
-Main.BackgroundTransparency =
-    0.05
-
+Main.BackgroundColor3 = C.Black
+Main.BackgroundTransparency = 0.06
 Main.BorderSizePixel = 0
 
+Main.Active = true
+Main.Visible = true
 Main.ZIndex = 10
+
 Main.Parent = ScreenGui
 
 Corner(Main, 18)
+Stroke(Main, C.Purple, 2, 0.08)
 
-Stroke(
-    Main,
-    C.Purple,
-    2,
-    0.08
-)
+local MainBackground = Instance.new("ImageLabel")
 
-
-local MainBackground =
-    Instance.new("ImageLabel")
-
-MainBackground.Size =
-    UDim2.fromScale(1, 1)
-
+MainBackground.Size = UDim2.fromScale(1, 1)
 MainBackground.BackgroundTransparency = 1
-
-MainBackground.Image =
-    BACKGROUND_IMAGE
-
-MainBackground.ImageTransparency =
-    0.25
-
-MainBackground.ScaleType =
-    Enum.ScaleType.Crop
-
+MainBackground.Image = BACKGROUND_IMAGE
+MainBackground.ImageTransparency = 0.22
+MainBackground.ScaleType = Enum.ScaleType.Crop
 MainBackground.ZIndex = 11
+
 MainBackground.Parent = Main
 
 Corner(MainBackground, 18)
 
+local MainOverlay = Instance.new("Frame")
 
-local MainOverlay =
-    Instance.new("Frame")
-
-MainOverlay.Size =
-    UDim2.fromScale(1, 1)
-
-MainOverlay.BackgroundColor3 =
-    Color3.fromRGB(3, 2, 7)
-
-MainOverlay.BackgroundTransparency =
-    0.74
-
+MainOverlay.Size = UDim2.fromScale(1, 1)
+MainOverlay.BackgroundColor3 = Color3.fromRGB(3, 2, 7)
+MainOverlay.BackgroundTransparency = 0.74
 MainOverlay.BorderSizePixel = 0
-
 MainOverlay.ZIndex = 12
+
 MainOverlay.Parent = Main
 
 Corner(MainOverlay, 18)
-
 
 --========================================================
 -- HEADER
 --========================================================
 
-local Header =
-    Instance.new("Frame")
+local Header = Instance.new("Frame")
 
-Header.Size =
-    UDim2.new(1, -24, 0, 59)
-
-Header.Position =
-    UDim2.fromOffset(12, 7)
-
+Header.Size = UDim2.new(1, -24, 0, 59)
+Header.Position = UDim2.fromOffset(12, 7)
 Header.BackgroundTransparency = 1
-
 Header.ZIndex = 20
+
 Header.Parent = Main
 
+local Title = Label(
+    Header,
+    HUB_NAME,
+    UDim2.fromOffset(140, 29),
+    UDim2.fromOffset(8, 1),
+    24,
+    C.White
+)
 
-local Title =
-    Label(
-        Header,
-        HUB_NAME,
-        UDim2.fromOffset(140, 29),
-        UDim2.fromOffset(8, 1),
-        24,
-        C.White
-    )
+Title.Font = Enum.Font.GothamBold
 
-Title.Font =
-    Enum.Font.GothamBold
+local Admin = Label(
+    Header,
+    "ADMIN",
+    UDim2.fromOffset(58, 21),
+    UDim2.fromOffset(147, 5),
+    10,
+    Color3.fromRGB(35, 27, 5)
+)
 
-
-local Admin =
-    Label(
-        Header,
-        "ADMIN",
-        UDim2.fromOffset(58, 21),
-        UDim2.fromOffset(147, 5),
-        10,
-        Color3.fromRGB(35, 27, 5)
-    )
-
-Admin.BackgroundColor3 =
-    C.Yellow
-
+Admin.BackgroundColor3 = C.Yellow
 Admin.BackgroundTransparency = 0
-
-Admin.TextXAlignment =
-    Enum.TextXAlignment.Center
-
-Admin.Font =
-    Enum.Font.GothamBold
+Admin.TextXAlignment = Enum.TextXAlignment.Center
+Admin.Font = Enum.Font.GothamBold
 
 Corner(Admin, 6)
 
+local Subtitle = Label(
+    Header,
+    GAME_NAME,
+    UDim2.fromOffset(180, 19),
+    UDim2.fromOffset(9, 33),
+    12,
+    C.PurpleText
+)
 
-local Subtitle =
-    Label(
-        Header,
-        GAME_NAME,
-        UDim2.fromOffset(180, 19),
-        UDim2.fromOffset(9, 33),
-        12,
-        C.PurpleText
-    )
+local HideButton = Instance.new("ImageButton")
 
+HideButton.Size = UDim2.fromOffset(40, 40)
+HideButton.Position = UDim2.new(1, -44, 0, 5)
 
-local HideButton =
-    Instance.new("ImageButton")
-
-HideButton.Size =
-    UDim2.fromOffset(40, 40)
-
-HideButton.Position =
-    UDim2.new(1, -44, 0, 5)
-
-HideButton.BackgroundColor3 =
-    C.Panel2
-
-HideButton.BackgroundTransparency =
-    0.05
-
-HideButton.Image =
-    BACKGROUND_IMAGE
-
-HideButton.ImageTransparency =
-    0.08
+HideButton.BackgroundColor3 = C.Panel2
+HideButton.BackgroundTransparency = 0.05
+HideButton.Image = BACKGROUND_IMAGE
+HideButton.ImageTransparency = 0.08
 
 HideButton.AutoButtonColor = false
-
+HideButton.Active = true
 HideButton.ZIndex = 40
+
 HideButton.Parent = Header
 
 Corner(HideButton, 10)
+Stroke(HideButton, C.Purple, 1, 0.2)
 
-Stroke(
+local HideOverlay = Instance.new("Frame")
+
+HideOverlay.Size = UDim2.fromScale(1, 1)
+HideOverlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+HideOverlay.BackgroundTransparency = 0.30
+HideOverlay.BorderSizePixel = 0
+HideOverlay.ZIndex = 41
+
+HideOverlay.Parent = HideButton
+Corner(HideOverlay, 10)
+
+local HideText = Label(
     HideButton,
-    C.Purple,
-    1,
-    0.2
+    "−",
+    UDim2.fromScale(1, 1),
+    UDim2.fromOffset(0, 0),
+    22,
+    C.White
 )
 
-
-local HideText =
-    Label(
-        HideButton,
-        "−",
-        UDim2.fromScale(1, 1),
-        UDim2.fromOffset(0, 0),
-        22,
-        C.White
-    )
-
-HideText.TextXAlignment =
-    Enum.TextXAlignment.Center
-
-HideText.Font =
-    Enum.Font.GothamBold
-
+HideText.TextXAlignment = Enum.TextXAlignment.Center
+HideText.Font = Enum.Font.GothamBold
 HideText.ZIndex = 42
-
 
 --========================================================
 -- SIDEBAR
 --========================================================
 
-local Sidebar =
-    Instance.new("Frame")
+local Sidebar = Instance.new("Frame")
 
-Sidebar.Size =
-    UDim2.fromOffset(183, 292)
+Sidebar.Size = UDim2.fromOffset(183, 292)
+Sidebar.Position = UDim2.fromOffset(12, 73)
 
-Sidebar.Position =
-    UDim2.fromOffset(12, 73)
-
-Sidebar.BackgroundColor3 =
-    C.Panel
-
-Sidebar.BackgroundTransparency =
-    0.04
-
+Sidebar.BackgroundColor3 = C.Panel
+Sidebar.BackgroundTransparency = 0.04
 Sidebar.BorderSizePixel = 0
 
 Sidebar.ZIndex = 20
 Sidebar.Parent = Main
 
 Corner(Sidebar, 13)
-
 Stroke(
     Sidebar,
     Color3.fromRGB(45, 38, 58),
@@ -1166,31 +795,24 @@ Stroke(
     0.25
 )
 
+--========================================================
+-- CONTENT
+--========================================================
 
-local Content =
-    Instance.new("Frame")
+local Content = Instance.new("Frame")
 
-Content.Size =
-    UDim2.fromOffset(348, 292)
+Content.Size = UDim2.fromOffset(348, 292)
+Content.Position = UDim2.fromOffset(195, 73)
 
-Content.Position =
-    UDim2.fromOffset(195, 73)
-
-Content.BackgroundColor3 =
-    C.Panel
-
-Content.BackgroundTransparency =
-    0.04
-
+Content.BackgroundColor3 = C.Panel
+Content.BackgroundTransparency = 0.04
 Content.BorderSizePixel = 0
 
 Content.ClipsDescendants = true
-
 Content.ZIndex = 20
 Content.Parent = Main
 
 Corner(Content, 13)
-
 Stroke(
     Content,
     Color3.fromRGB(45, 38, 58),
@@ -1198,6 +820,9 @@ Stroke(
     0.25
 )
 
+--========================================================
+-- PAGES
+--========================================================
 
 local Pages = {}
 local Tabs = {}
@@ -1209,132 +834,110 @@ local TabNames = {
     "Movement",
     "Player",
     "Utility",
-    "Activity",
-    "Update",
+    "Update"
 }
-
 
 for i, name in ipairs(TabNames) do
 
-    local tab =
-        Button(
-            Sidebar,
-            name,
-            UDim2.new(1, -14, 0, 30),
-            UDim2.fromOffset(
-                7,
-                6 + ((i - 1) * 35)
-            )
+    local tab = Button(
+        Sidebar,
+        name,
+        UDim2.new(1, -14, 0, 34),
+        UDim2.fromOffset(
+            7,
+            8 + ((i - 1) * 39)
         )
+    )
 
-    tab.TextSize = 11
-
+    tab.TextSize = 12
     Tabs[name] = tab
 
-    local page =
-        Instance.new("Frame")
+    local page = Instance.new("Frame")
 
-    page.Name =
-        name:gsub("%s+", "")
-
-    page.Size =
-        UDim2.fromScale(1, 1)
+    page.Name = name:gsub("%s+", "")
+    page.Size = UDim2.fromScale(1, 1)
 
     page.BackgroundTransparency = 1
-
     page.Visible = false
-
     page.ZIndex = 21
+
     page.Parent = Content
 
     Pages[name] = page
 end
 
+local CurrentPage = "Dashboard"
 
 local function ShowPage(name)
 
+    if not Pages[name] then
+        name = "Dashboard"
+    end
+
+    CurrentPage = name
+
     for pageName, page in pairs(Pages) do
-        page.Visible =
-            pageName == name
+        if page and page.Parent then
+            page.Visible = pageName == name
+        end
     end
 
     for tabName, tab in pairs(Tabs) do
+        if tab and tab.Parent then
 
-        if tabName == name then
+            if tabName == name then
+                tab.BackgroundColor3 = C.Selected
+                tab:SetAttribute("VensSelected", true)
+            else
+                tab.BackgroundColor3 = C.Button
+                tab:SetAttribute("VensSelected", false)
+            end
 
-            tab.BackgroundColor3 =
-                C.Selected
-
-            tab:SetAttribute(
-                "VensSelected",
-                true
-            )
-
-        else
-
-            tab.BackgroundColor3 =
-                C.Button
-
-            tab:SetAttribute(
-                "VensSelected",
-                false
-            )
         end
     end
 end
 
-
 for name, tab in pairs(Tabs) do
-
-    Connect(
-        tab.Activated,
-        function()
-            ShowPage(name)
-        end
-    )
+    Connect(tab.Activated, function()
+        ShowPage(name)
+    end)
 end
 
+--========================================================
+-- DRAG
+--========================================================
 
-local DragHandle =
-    Instance.new("Frame")
+local DragHandle = Instance.new("Frame")
 
-DragHandle.Size =
-    UDim2.new(1, -100, 0, 52)
-
-DragHandle.Position =
-    UDim2.fromOffset(0, 0)
+DragHandle.Name = "DragHandle"
+DragHandle.Size = UDim2.new(1, -100, 0, 52)
+DragHandle.Position = UDim2.fromOffset(0, 0)
 
 DragHandle.BackgroundTransparency = 1
 DragHandle.BorderSizePixel = 0
-
 DragHandle.Active = true
 DragHandle.ZIndex = 19
+
 DragHandle.Parent = Header
 
-MakeDraggable(
-    Main,
-    DragHandle
-)
+MakeDraggable(Main, DragHandle)
 
+--========================================================
+-- PAGE HEADER
+--========================================================
 
-local function PageHeader(
-    page,
-    title,
-    subtitle
-)
+local function PageHeader(page, title, subtitle)
 
-    local titleLabel =
-        Label(
-            page,
-            title,
-            UDim2.new(1, -24, 0, 26),
-            UDim2.fromOffset(12, 8),
-            18,
-            C.White
-        )
+    local titleLabel = Label(
+        page,
+        title,
+        UDim2.new(1, -24, 0, 26),
+        UDim2.fromOffset(12, 8),
+        18,
+        C.White
+    )
 
-    titleLabel.Font =
-        Enum.Font.GothamBold
+    titleLabel.Font = Enum.Font.GothamBold
 
     Label(
         page,
@@ -1346,13 +949,11 @@ local function PageHeader(
     )
 end
 
-
 --========================================================
 -- DASHBOARD
 --========================================================
 
-local Dashboard =
-    Pages["Dashboard"]
+local Dashboard = Pages["Dashboard"]
 
 PageHeader(
     Dashboard,
@@ -1360,31 +961,18 @@ PageHeader(
     "VensHub • Ride a Pet"
 )
 
+local function DashRow(text, y, color)
 
-local function DashRow(
-    text,
-    y,
-    color
-)
+    local row = Instance.new("Frame")
 
-    local row =
-        Instance.new("Frame")
+    row.Size = UDim2.new(1, -24, 0, 34)
+    row.Position = UDim2.fromOffset(12, y)
 
-    row.Size =
-        UDim2.new(1, -24, 0, 31)
-
-    row.Position =
-        UDim2.fromOffset(12, y)
-
-    row.BackgroundColor3 =
-        C.Panel2
-
-    row.BackgroundTransparency =
-        0.04
-
+    row.BackgroundColor3 = C.Panel2
+    row.BackgroundTransparency = 0.04
     row.BorderSizePixel = 0
-
     row.ZIndex = 23
+
     row.Parent = Dashboard
 
     Corner(row, 8)
@@ -1399,77 +987,678 @@ local function DashRow(
     )
 end
 
-
 local DashStatus =
-    DashRow(
-        "●  Status: Ready",
-        58,
-        C.Green
-    )
-
+    DashRow("●  Status: Ready", 58, C.Green)
 
 local DashEggs =
-    DashRow(
-        "Scanned Eggs: 0",
-        94
-    )
-
+    DashRow("Scanned Eggs: 0", 97)
 
 local DashSelected =
-    DashRow(
-        "Selected Egg: None",
-        130
-    )
-
+    DashRow("Selected Egg: None", 136)
 
 local DashTravel =
-    DashRow(
-        "Travel: Idle",
-        166
-    )
-
+    DashRow("Travel: Idle", 175)
 
 local DashAuto =
-    DashRow(
-        "Auto: OFF",
-        202
-    )
+    DashRow("Auto: OFF", 214)
 
-
-local DashActivity =
+local DashRange =
     DashRow(
-        "Activity: 0",
-        238,
+        "Scanner range: > 500 studs",
+        253,
         C.PurpleText
     )
 
+--========================================================
+-- EGG TRAVEL
+--========================================================
+
+local TravelPage = Pages["Egg Travel"]
+
+PageHeader(
+    TravelPage,
+    "Egg Travel",
+    "Shared scanner • eggs beyond 500 studs"
+)
+
+local SelectedLabel = Label(
+    TravelPage,
+    "Selected: None",
+    UDim2.new(1, -24, 0, 18),
+    UDim2.fromOffset(12, 54),
+    10,
+    C.PurpleText
+)
+
+local EggList = Instance.new("ScrollingFrame")
+
+EggList.Size = UDim2.new(1, -24, 0, 91)
+EggList.Position = UDim2.fromOffset(12, 76)
+
+EggList.BackgroundColor3 = Color3.fromRGB(11, 10, 16)
+EggList.BackgroundTransparency = 0.02
+EggList.BorderSizePixel = 0
+
+EggList.ScrollBarThickness = 3
+EggList.ScrollBarImageColor3 = C.Purple
+EggList.CanvasSize = UDim2.new()
+EggList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+EggList.ZIndex = 25
+EggList.Parent = TravelPage
+
+Corner(EggList, 8)
+
+local EggPadding = Instance.new("UIPadding")
+
+EggPadding.PaddingTop = UDim.new(0, 4)
+EggPadding.PaddingBottom = UDim.new(0, 4)
+EggPadding.PaddingLeft = UDim.new(0, 4)
+EggPadding.PaddingRight = UDim.new(0, 4)
+
+EggPadding.Parent = EggList
+
+local EggLayout = Instance.new("UIListLayout")
+
+EggLayout.Padding = UDim.new(0, 3)
+EggLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+EggLayout.Parent = EggList
+
+local SearchBox =
+    Input(TravelPage, "Type Egg", "")
+
+SearchBox.Size = UDim2.fromOffset(180, 30)
+SearchBox.Position = UDim2.fromOffset(12, 176)
+
+local SpeedBox =
+    Input(TravelPage, "Speed", "100")
+
+SpeedBox.Size = UDim2.fromOffset(72, 30)
+SpeedBox.Position = UDim2.fromOffset(198, 176)
+
+local RefreshEggs =
+    Button(
+        TravelPage,
+        "REFRESH",
+        UDim2.fromOffset(66, 30),
+        UDim2.fromOffset(270, 176)
+    )
+
+local SaveSpawnButton =
+    Button(
+        TravelPage,
+        "SAVE SPAWN",
+        UDim2.fromOffset(96, 30),
+        UDim2.fromOffset(12, 214)
+    )
+
+local TakeEggButton =
+    Button(
+        TravelPage,
+        "TAKE TO EGG",
+        UDim2.fromOffset(96, 30),
+        UDim2.fromOffset(114, 214)
+    )
+
+local ReturnSpawnButton =
+    Button(
+        TravelPage,
+        "TO SPAWN",
+        UDim2.fromOffset(96, 30),
+        UDim2.fromOffset(216, 214)
+    )
+
+local StopTravelButton =
+    Button(
+        TravelPage,
+        "STOP",
+        UDim2.fromOffset(96, 30),
+        UDim2.fromOffset(12, 252)
+    )
+
+local ClearTargetTravel =
+    Button(
+        TravelPage,
+        "CLEAR TARGET",
+        UDim2.fromOffset(96, 30),
+        UDim2.fromOffset(114, 252)
+    )
+
+--========================================================
+-- AUTO PAGE
+--========================================================
+
+local AutoPage = Pages["Auto"]
+
+PageHeader(
+    AutoPage,
+    "Auto Egg",
+    "Select egg types for Auto Egg / Instant"
+)
+
+local AutoStatus = Label(
+    AutoPage,
+    "Status: OFF • waiting for selection",
+    UDim2.new(1, -24, 0, 18),
+    UDim2.fromOffset(12, 54),
+    10,
+    C.Gray
+)
+
+local AutoSelectedLabel = Label(
+    AutoPage,
+    "Selected Eggs: 0",
+    UDim2.new(1, -24, 0, 20),
+    UDim2.fromOffset(12, 78),
+    10,
+    C.PurpleText
+)
+
+local SelectEggButton =
+    Button(
+        AutoPage,
+        "▣  SELECT EGG",
+        UDim2.fromOffset(150, 34),
+        UDim2.fromOffset(12, 106)
+    )
+
+SelectEggButton.TextSize = 11
+SelectEggButton.Font = Enum.Font.GothamBold
+
+local SelectAllEggsButton =
+    Button(
+        AutoPage,
+        "✓  ALL",
+        UDim2.fromOffset(82, 34),
+        UDim2.fromOffset(170, 106)
+    )
+
+SelectAllEggsButton.TextSize = 10
+SelectAllEggsButton.Font = Enum.Font.GothamBold
+
+local ClearAllEggsButton =
+    Button(
+        AutoPage,
+        "×  CLEAR",
+        UDim2.fromOffset(70, 34),
+        UDim2.fromOffset(260, 106)
+    )
+
+ClearAllEggsButton.TextSize = 10
+ClearAllEggsButton.Font = Enum.Font.GothamBold
+
+local AutoEggButton =
+    Button(
+        AutoPage,
+        "AUTO EGG  •  OFF",
+        UDim2.fromOffset(96, 31),
+        UDim2.fromOffset(12, 153)
+    )
+
+AutoEggButton.TextSize = 9
+AutoEggButton.Font = Enum.Font.GothamBold
+
+local AutoInstantButton =
+    Button(
+        AutoPage,
+        "INSTANT  •  OFF",
+        UDim2.fromOffset(96, 31),
+        UDim2.fromOffset(114, 153)
+    )
+
+AutoInstantButton.TextSize = 9
+AutoInstantButton.Font = Enum.Font.GothamBold
+
+local AutoStopButton =
+    Button(
+        AutoPage,
+        "■  STOP",
+        UDim2.fromOffset(96, 31),
+        UDim2.fromOffset(216, 153)
+    )
+
+AutoStopButton.TextSize = 9
+AutoStopButton.Font = Enum.Font.GothamBold
+
+local AutoHint = Label(
+    AutoPage,
+    "Choose one or more egg types. Scanner only uses eggs > 500 studs.",
+    UDim2.new(1, -24, 0, 28),
+    UDim2.fromOffset(12, 196),
+    9,
+    C.Gray
+)
+
+AutoHint.TextWrapped = true
+AutoHint.TextYAlignment = Enum.TextYAlignment.Top
+
+--========================================================
+-- SELECT EGG
+--========================================================
+
+local AutoSelector = Instance.new("Frame")
+
+AutoSelector.Name = "AutoEggSelector"
+AutoSelector.Size = UDim2.fromOffset(324, 258)
+AutoSelector.Position = UDim2.fromOffset(12, 25)
+
+AutoSelector.BackgroundColor3 = Color3.fromRGB(9, 8, 13)
+AutoSelector.BorderSizePixel = 0
+
+AutoSelector.Visible = false
+AutoSelector.Active = true
+AutoSelector.ZIndex = 80
+
+AutoSelector.Parent = AutoPage
+
+Corner(AutoSelector, 14)
+Stroke(AutoSelector, C.Purple, 1.4, 0.12)
+
+local SelectorTitle = Label(
+    AutoSelector,
+    "SELECT EGG",
+    UDim2.new(1, -75, 0, 27),
+    UDim2.fromOffset(14, 8),
+    15,
+    C.White
+)
+
+SelectorTitle.Font = Enum.Font.GothamBold
+SelectorTitle.ZIndex = 82
+
+local SelectorSubtitle = Label(
+    AutoSelector,
+    "Select egg types",
+    UDim2.new(1, -75, 0, 18),
+    UDim2.fromOffset(14, 34),
+    8,
+    C.Gray
+)
+
+SelectorSubtitle.ZIndex = 82
+
+local SelectorCount = Label(
+    AutoSelector,
+    "0 selected",
+    UDim2.fromOffset(90, 20),
+    UDim2.new(1, -102, 0, 11),
+    9,
+    C.PurpleText
+)
+
+SelectorCount.TextXAlignment = Enum.TextXAlignment.Right
+SelectorCount.ZIndex = 82
+
+local SelectorClose =
+    Button(
+        AutoSelector,
+        "×",
+        UDim2.fromOffset(28, 28),
+        UDim2.new(1, -42, 0, 8)
+    )
+
+SelectorClose.TextSize = 17
+SelectorClose.TextColor3 = C.Gray
+SelectorClose.ZIndex = 83
+
+local SelectorSearch =
+    Input(
+        AutoSelector,
+        "Search egg type...",
+        ""
+    )
+
+SelectorSearch.Size = UDim2.new(1, -28, 0, 31)
+SelectorSearch.Position = UDim2.fromOffset(14, 57)
+SelectorSearch.ZIndex = 82
+
+local SelectorList = Instance.new("ScrollingFrame")
+
+SelectorList.Size = UDim2.new(1, -28, 0, 119)
+SelectorList.Position = UDim2.fromOffset(14, 94)
+
+SelectorList.BackgroundColor3 = Color3.fromRGB(5, 5, 8)
+SelectorList.BorderSizePixel = 0
+
+SelectorList.ScrollBarThickness = 3
+SelectorList.ScrollBarImageColor3 = C.Purple
+
+SelectorList.CanvasSize = UDim2.new()
+SelectorList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+
+SelectorList.ZIndex = 82
+SelectorList.Parent = AutoSelector
+
+Corner(SelectorList, 9)
+
+local SelectorPadding = Instance.new("UIPadding")
+
+SelectorPadding.PaddingTop = UDim.new(0, 5)
+SelectorPadding.PaddingBottom = UDim.new(0, 5)
+SelectorPadding.PaddingLeft = UDim.new(0, 5)
+SelectorPadding.PaddingRight = UDim.new(0, 5)
+
+SelectorPadding.Parent = SelectorList
+
+local SelectorLayout = Instance.new("UIListLayout")
+
+SelectorLayout.Padding = UDim.new(0, 4)
+SelectorLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+SelectorLayout.Parent = SelectorList
+
+local SelectorSelectAll =
+    Button(
+        AutoSelector,
+        "✓  SELECT ALL",
+        UDim2.fromOffset(94, 29),
+        UDim2.fromOffset(14, 222)
+    )
+
+local SelectorClear =
+    Button(
+        AutoSelector,
+        "×  CLEAR",
+        UDim2.fromOffset(94, 29),
+        UDim2.fromOffset(114, 222)
+    )
+
+local SelectorDone =
+    Button(
+        AutoSelector,
+        "DONE  ✓",
+        UDim2.fromOffset(94, 29),
+        UDim2.fromOffset(214, 222)
+    )
+
+--========================================================
+-- MOVEMENT
+--========================================================
+
+local MovementPage = Pages["Movement"]
+
+PageHeader(
+    MovementPage,
+    "Movement",
+    "Player movement settings"
+)
+
+local WalkBox =
+    Input(
+        MovementPage,
+        "WalkSpeed",
+        "16"
+    )
+
+WalkBox.Size = UDim2.fromOffset(150, 30)
+WalkBox.Position = UDim2.fromOffset(12, 62)
+
+local JumpBox =
+    Input(
+        MovementPage,
+        "JumpPower",
+        "50"
+    )
+
+JumpBox.Size = UDim2.fromOffset(150, 30)
+JumpBox.Position = UDim2.fromOffset(174, 62)
+
+local FlySpeedBox =
+    Input(
+        MovementPage,
+        "Fly Speed",
+        "60"
+    )
+
+FlySpeedBox.Size = UDim2.fromOffset(150, 30)
+FlySpeedBox.Position = UDim2.fromOffset(12, 100)
+
+local TravelSpeedBox =
+    Input(
+        MovementPage,
+        "Travel Speed",
+        "100"
+    )
+
+TravelSpeedBox.Size = UDim2.fromOffset(150, 30)
+TravelSpeedBox.Position = UDim2.fromOffset(174, 100)
+
+local ApplyMovement =
+    Button(
+        MovementPage,
+        "APPLY",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(12, 139)
+    )
+
+local NoclipButton =
+    Button(
+        MovementPage,
+        "NOCLIP: OFF",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(174, 139)
+    )
+
+local FlyButton =
+    Button(
+        MovementPage,
+        "FLY: OFF",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(12, 178)
+    )
+
+Label(
+    MovementPage,
+    "Travel automatically takes priority over Fly.",
+    UDim2.new(1, -24, 0, 28),
+    UDim2.fromOffset(12, 218),
+    9,
+    C.Gray
+)
+
+--========================================================
+-- PLAYER
+--========================================================
+
+local PlayerPage = Pages["Player"]
+
+PageHeader(
+    PlayerPage,
+    "Player",
+    "Character information"
+)
+
+local PlayerName = Label(
+    PlayerPage,
+    "Player: " .. LocalPlayer.Name,
+    UDim2.new(1, -24, 0, 26),
+    UDim2.fromOffset(12, 64),
+    11,
+    C.White
+)
+
+local CharacterStatus = Label(
+    PlayerPage,
+    "Character: Ready",
+    UDim2.new(1, -24, 0, 26),
+    UDim2.fromOffset(12, 97),
+    11,
+    C.Green
+)
+
+local SpawnStatus = Label(
+    PlayerPage,
+    "Spawn: Saved",
+    UDim2.new(1, -24, 0, 26),
+    UDim2.fromOffset(12, 130),
+    11,
+    C.White
+)
+
+local SavePlayerSpawn =
+    Button(
+        PlayerPage,
+        "SAVE CURRENT SPAWN",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(12, 172)
+    )
+
+--========================================================
+-- UTILITY
+--========================================================
+
+local UtilityPage = Pages["Utility"]
+
+PageHeader(
+    UtilityPage,
+    "Utility",
+    "Additional controls"
+)
+
+local UtilityStatus = Label(
+    UtilityPage,
+    "Ready",
+    UDim2.new(1, -24, 0, 20),
+    UDim2.fromOffset(12, 53),
+    10,
+    C.Gray
+)
+
+local ESPButton =
+    Button(
+        UtilityPage,
+        "EGG ESP: OFF",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(12, 80)
+    )
+
+local AntiAFKButton =
+    Button(
+        UtilityPage,
+        "ANTI AFK: OFF",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(174, 80)
+    )
+
+local RescanButton =
+    Button(
+        UtilityPage,
+        "FORCE RESCAN",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(12, 118)
+    )
+
+local ClearTargetButton =
+    Button(
+        UtilityPage,
+        "CLEAR TARGET",
+        UDim2.fromOffset(150, 31),
+        UDim2.fromOffset(174, 118)
+    )
+
+--========================================================
+-- UPDATE
+--========================================================
+
+local UpdatePage = Pages["Update"]
+
+PageHeader(
+    UpdatePage,
+    "Update",
+    "VensHub • Ride a Pet"
+)
+
+local UpdateBox = Instance.new("Frame")
+
+UpdateBox.Size = UDim2.new(1, -24, 0, 183)
+UpdateBox.Position = UDim2.fromOffset(12, 64)
+
+UpdateBox.BackgroundColor3 = C.Panel2
+UpdateBox.BackgroundTransparency = 0.04
+UpdateBox.BorderSizePixel = 0
+UpdateBox.ZIndex = 23
+
+UpdateBox.Parent = UpdatePage
+
+Corner(UpdateBox, 9)
+Stroke(
+    UpdateBox,
+    Color3.fromRGB(45, 38, 58),
+    1,
+    0.25
+)
+
+local UpdateText = Label(
+    UpdateBox,
+    "VensHub V1\n\n"
+    .. "• Fast Loading Screen\n"
+    .. "• Main GUI Bug Fix\n"
+    .. "• Egg Scanner > 500 studs\n"
+    .. "• Manual Egg Travel\n"
+    .. "• Auto Egg / Instant\n"
+    .. "• Egg ESP\n"
+    .. "• Fly / Noclip\n"
+    .. "• Mobile + PC UI",
+    UDim2.new(1, -18, 1, -12),
+    UDim2.fromOffset(9, 7),
+    10,
+    C.White
+)
+
+UpdateText.TextYAlignment = Enum.TextYAlignment.Top
 
 --========================================================
 -- EGG SYSTEM
 --========================================================
 
-local EggLookup = {
-    ["soul egg"] = "Soul Egg",
-    ["volcanic egg"] = "Volcanic Egg",
-    ["dominus egg"] = "Dominus Egg",
-    ["blackhole egg"] = "Blackhole Egg",
-    ["black hole egg"] = "Blackhole Egg",
-    ["galaxy egg"] = "Galaxy Egg",
-    ["legendary egg"] = "Legendary Egg",
-    ["mythic egg"] = "Mythic Egg",
-    ["divine egg"] = "Divine Egg",
-    ["secret egg"] = "Secret Egg",
-    ["rainbow egg"] = "Rainbow Egg",
-    ["golden egg"] = "Golden Egg",
-    ["lava egg"] = "Lava Egg",
-    ["ice egg"] = "Ice Egg",
-    ["fire egg"] = "Fire Egg",
-    ["forest egg"] = "Forest Egg",
-    ["desert egg"] = "Desert Egg",
-    ["water egg"] = "Water Egg",
-    ["sky egg"] = "Sky Egg",
+local KnownEggs = {
+    "White Egg",
+    "Brown Egg",
+    "Cracked Egg",
+    "Easter Egg",
+    "Stone Egg",
+    "Leaf Egg",
+    "Mushroom Egg",
+    "Flower Egg",
+    "Slime Egg",
+    "Ice Egg",
+    "Glass Egg",
+    "Golden Egg",
+    "Diamond Egg",
+    "Crystal Egg",
+    "Skull Egg",
+    "Asteroid Egg",
+    "Dominus Egg",
+    "Flaming Egg",
+    "Sinister Egg",
+    "Soul Egg",
+    "Tidal Egg",
+    "Aurora Egg",
+    "Galaxy Egg",
+    "Blackhole Egg",
+    "Solaris Egg",
+    "Cherub Egg",
+    "Volcanic Egg",
 }
 
+local EggLookup = {}
+
+for _, eggName in ipairs(KnownEggs) do
+    EggLookup[string.lower(eggName)] = eggName
+end
+
+EggLookup["black hole egg"] = "Blackhole Egg"
+
+local function NormalizeName(value)
+    value = tostring(value or "")
+
+    value = value:gsub("[%c]", "")
+    value = value:gsub("%s+", " ")
+    value = value:match("^%s*(.-)%s*$") or ""
+
+    return string.lower(value)
+end
 
 local function GetEggName(object)
 
@@ -1477,33 +1666,22 @@ local function GetEggName(object)
         return nil
     end
 
-    local normalized =
-        NormalizeName(
-            object.Name
-        )
+    local normalized = NormalizeName(object.Name)
 
     if EggLookup[normalized] then
         return EggLookup[normalized]
     end
 
-    if normalized:find(
-        "egg",
-        1,
-        true
-    ) then
-
+    if normalized:find("egg", 1, true) then
         return object.Name
     end
 
     return nil
 end
 
-
 local function GetObjectPosition(object)
 
-    if not object
-        or not object.Parent then
-
+    if not object or not object.Parent then
         return nil
     end
 
@@ -1512,11 +1690,9 @@ local function GetObjectPosition(object)
     end
 
     if object:IsA("Model") then
-
-        local success, pivot =
-            pcall(function()
-                return object:GetPivot()
-            end)
+        local success, pivot = pcall(function()
+            return object:GetPivot()
+        end)
 
         if success and pivot then
             return pivot.Position
@@ -1536,19 +1712,14 @@ local function GetObjectPosition(object)
     return nil
 end
 
+local function IsInsideLocalCharacter(object)
 
-local function IsLocalCharacterObject(object)
-
-    local character =
-        LocalPlayer.Character
+    local character = LocalPlayer.Character
 
     return character
         and object
-        and object:IsDescendantOf(
-            character
-        )
+        and object:IsDescendantOf(character)
 end
-
 
 local function GetEggContainer(object)
 
@@ -1558,8 +1729,7 @@ local function GetEggContainer(object)
 
     local current = object
 
-    while current
-        and current ~= workspace do
+    while current and current ~= workspace do
 
         if current:IsA("Model")
             and GetEggName(current) then
@@ -1579,14 +1749,13 @@ local function GetEggContainer(object)
     return nil
 end
 
-
-local function RegisterCandidate(object)
+local function TryAddCandidate(object)
 
     if not object then
         return
     end
 
-    if IsLocalCharacterObject(object) then
+    if IsInsideLocalCharacter(object) then
         return
     end
 
@@ -1596,233 +1765,66 @@ local function RegisterCandidate(object)
     if candidate
         and candidate.Parent then
 
-        State.EggCandidates[candidate] =
-            true
+        State.EggCandidates[candidate] = true
     end
 end
 
+task.spawn(function()
 
-for _, object in ipairs(
-    workspace:GetDescendants()
-) do
+    local descendants = workspace:GetDescendants()
 
-    RegisterCandidate(object)
-end
+    for i = 1, #descendants do
 
+        TryAddCandidate(descendants[i])
+
+        if i % 500 == 0 then
+            task.wait()
+        end
+    end
+end)
 
 Connect(
     workspace.DescendantAdded,
     function(object)
-
-        RegisterCandidate(object)
+        TryAddCandidate(object)
     end
 )
-
 
 Connect(
     workspace.DescendantRemoving,
     function(object)
 
-        State.EggCandidates[object] =
-            nil
+        State.EggCandidates[object] = nil
+
+        local candidate =
+            GetEggContainer(object)
+
+        if candidate then
+            State.EggCandidates[candidate] = nil
+        end
     end
 )
 
-
 --========================================================
--- TRAVEL PAGE
---========================================================
-
-local TravelPage =
-    Pages["Egg Travel"]
-
-PageHeader(
-    TravelPage,
-    "Egg Travel",
-    "Scanner • eggs farther than 500 studs"
-)
-
-
-local SelectedLabel =
-    Label(
-        TravelPage,
-        "Selected: None",
-        UDim2.new(1, -24, 0, 18),
-        UDim2.fromOffset(12, 54),
-        10,
-        C.PurpleText
-    )
-
-
-local EggList =
-    Instance.new("ScrollingFrame")
-
-EggList.Size =
-    UDim2.new(1, -24, 0, 91)
-
-EggList.Position =
-    UDim2.fromOffset(12, 76)
-
-EggList.BackgroundColor3 =
-    Color3.fromRGB(11, 10, 16)
-
-EggList.BorderSizePixel = 0
-
-EggList.ScrollBarThickness = 3
-EggList.ScrollBarImageColor3 =
-    C.Purple
-
-EggList.CanvasSize =
-    UDim2.new()
-
-EggList.AutomaticCanvasSize =
-    Enum.AutomaticSize.Y
-
-EggList.ZIndex = 25
-EggList.Parent = TravelPage
-
-Corner(EggList, 8)
-
-
-local EggPadding =
-    Instance.new("UIPadding")
-
-EggPadding.PaddingTop =
-    UDim.new(0, 4)
-
-EggPadding.PaddingBottom =
-    UDim.new(0, 4)
-
-EggPadding.PaddingLeft =
-    UDim.new(0, 4)
-
-EggPadding.PaddingRight =
-    UDim.new(0, 4)
-
-EggPadding.Parent =
-    EggList
-
-
-local EggLayout =
-    Instance.new("UIListLayout")
-
-EggLayout.Padding =
-    UDim.new(0, 3)
-
-EggLayout.SortOrder =
-    Enum.SortOrder.LayoutOrder
-
-EggLayout.Parent =
-    EggList
-
-
-local SearchBox =
-    Input(
-        TravelPage,
-        "Type Egg",
-        ""
-    )
-
-SearchBox.Size =
-    UDim2.fromOffset(160, 30)
-
-SearchBox.Position =
-    UDim2.fromOffset(12, 176)
-
-
-local SpeedBox =
-    Input(
-        TravelPage,
-        "Speed",
-        "100"
-    )
-
-SpeedBox.Size =
-    UDim2.fromOffset(70, 30)
-
-SpeedBox.Position =
-    UDim2.fromOffset(178, 176)
-
-
-local RefreshEggs =
-    Button(
-        TravelPage,
-        "REFRESH",
-        UDim2.fromOffset(70, 30),
-        UDim2.fromOffset(252, 176)
-    )
-
-
-local SaveSpawnButton =
-    Button(
-        TravelPage,
-        "SAVE SPAWN",
-        UDim2.fromOffset(96, 30),
-        UDim2.fromOffset(12, 214)
-    )
-
-
-local TakeEggButton =
-    Button(
-        TravelPage,
-        "TAKE TO EGG",
-        UDim2.fromOffset(96, 30),
-        UDim2.fromOffset(114, 214)
-    )
-
-
-local ReturnSpawnButton =
-    Button(
-        TravelPage,
-        "TO SPAWN",
-        UDim2.fromOffset(96, 30),
-        UDim2.fromOffset(216, 214)
-    )
-
-
-local StopTravelButton =
-    Button(
-        TravelPage,
-        "STOP",
-        UDim2.fromOffset(96, 30),
-        UDim2.fromOffset(12, 252)
-    )
-
-
-local ClearTargetTravel =
-    Button(
-        TravelPage,
-        "CLEAR TARGET",
-        UDim2.fromOffset(96, 30),
-        UDim2.fromOffset(114, 252)
-    )
-
-
---========================================================
--- SCAN
+-- SCANNER
 --========================================================
 
 local function ScanEggs()
 
-    local root =
-        GetRoot()
+    local root = GetRoot()
 
     if not root then
         return {}
     end
 
-    State.ScanCount += 1
-
     local results = {}
     local seen = {}
 
-    for object in pairs(
-        State.EggCandidates
-    ) do
+    for object in pairs(State.EggCandidates) do
 
         if object
             and object.Parent
-            and not IsLocalCharacterObject(object) then
+            and not IsInsideLocalCharacter(object) then
 
             local eggName =
                 GetEggName(object)
@@ -1833,28 +1835,19 @@ local function ScanEggs()
             if eggName and position then
 
                 local distance =
-                    (
-                        position
-                        - root.Position
-                    ).Magnitude
+                    (position - root.Position).Magnitude
 
-                if distance >
-                    MIN_SCAN_DISTANCE then
+                if distance > MIN_SCAN_DISTANCE
+                    and not seen[object] then
 
-                    if not seen[object] then
+                    seen[object] = true
 
-                        seen[object] = true
-
-                        table.insert(
-                            results,
-                            {
-                                Name = eggName,
-                                Object = object,
-                                Position = position,
-                                Distance = distance,
-                            }
-                        )
-                    end
+                    results[#results + 1] = {
+                        Name = eggName,
+                        Object = object,
+                        Position = position,
+                        Distance = distance,
+                    }
                 end
             end
         end
@@ -1864,31 +1857,119 @@ local function ScanEggs()
         results,
         function(a, b)
 
-            if a.Distance ==
-                b.Distance then
-
-                return NormalizeName(
-                    a.Name
-                ) <
-                NormalizeName(
-                    b.Name
-                )
+            if a.Distance == b.Distance then
+                return NormalizeName(a.Name)
+                    < NormalizeName(b.Name)
             end
 
-            return a.Distance <
-                b.Distance
+            return a.Distance < b.Distance
         end
     )
 
     return results
 end
 
+--========================================================
+-- ESP
+--========================================================
+
+local ESPObjects = {}
+
+local function ClearESP()
+
+    for object, gui in pairs(ESPObjects) do
+
+        pcall(function()
+            gui:Destroy()
+        end)
+
+        ESPObjects[object] = nil
+    end
+end
+
+local function RefreshESP()
+
+    ClearESP()
+
+    if not State.ESP then
+        return
+    end
+
+    for _, egg in ipairs(State.Eggs) do
+
+        local object = egg.Object
+
+        if object and object.Parent then
+
+            local adornee
+
+            if object:IsA("BasePart") then
+                adornee = object
+            else
+                adornee =
+                    object:FindFirstChildWhichIsA(
+                        "BasePart",
+                        true
+                    )
+            end
+
+            if adornee then
+
+                local billboard =
+                    Instance.new("BillboardGui")
+
+                billboard.Name =
+                    "VensHubEggESP"
+
+                billboard.Adornee = adornee
+                billboard.Size =
+                    UDim2.fromOffset(135, 34)
+
+                billboard.StudsOffset =
+                    Vector3.new(0, 3, 0)
+
+                billboard.AlwaysOnTop = true
+                billboard.Parent = ScreenGui
+
+                local text =
+                    Instance.new("TextLabel")
+
+                text.Size =
+                    UDim2.fromScale(1, 1)
+
+                text.BackgroundColor3 = C.Black
+                text.BackgroundTransparency = 0.15
+
+                text.TextColor3 =
+                    C.PurpleText
+
+                text.TextStrokeTransparency = 0.4
+                text.Font = Enum.Font.GothamBold
+                text.TextSize = 10
+
+                text.Text =
+                    egg.Name
+                    .. "\n"
+                    .. math.floor(egg.Distance)
+                    .. " studs"
+
+                text.Parent = billboard
+
+                Corner(text, 7)
+
+                ESPObjects[object] = billboard
+            end
+        end
+    end
+end
+
+--========================================================
+-- EGG LIST
+--========================================================
 
 local function ClearEggList()
 
-    for _, child in ipairs(
-        EggList:GetChildren()
-    ) do
+    for _, child in ipairs(EggList:GetChildren()) do
 
         if child:IsA("TextButton")
             or child:IsA("TextLabel") then
@@ -1898,158 +1979,124 @@ local function ClearEggList()
     end
 end
 
+local function AddEggRow(egg)
+
+    local button =
+        Instance.new("TextButton")
+
+    button.Size =
+        UDim2.new(1, -2, 0, 27)
+
+    button.BackgroundColor3 = C.Button
+    button.BorderSizePixel = 0
+
+    button.Text = ""
+    button.AutoButtonColor = false
+
+    button.ZIndex = 30
+    button.Parent = EggList
+
+    Corner(button, 6)
+
+    local name =
+        Label(
+            button,
+            egg.Name,
+            UDim2.new(0.62, 0, 1, 0),
+            UDim2.fromOffset(8, 0),
+            10,
+            C.White
+        )
+
+    name.ZIndex = 31
+
+    local distance =
+        Label(
+            button,
+            math.floor(egg.Distance)
+                .. " studs",
+            UDim2.new(0.38, -8, 1, 0),
+            UDim2.new(0.62, 0, 0, 0),
+            9,
+            C.PurpleText
+        )
+
+    distance.TextXAlignment =
+        Enum.TextXAlignment.Right
+
+    distance.ZIndex = 31
+
+    Connect(
+        button.Activated,
+        function()
+
+            State.SelectedEgg = egg.Name
+            State.SelectedObject = egg.Object
+
+            SelectedLabel.Text =
+                "Selected: "
+                .. egg.Name
+
+            DashSelected.Text =
+                "Selected Egg: "
+                .. egg.Name
+
+            for _, child in ipairs(
+                EggList:GetChildren()
+            ) do
+
+                if child:IsA("TextButton") then
+
+                    child.BackgroundColor3 =
+                        C.Button
+
+                    child:SetAttribute(
+                        "VensSelected",
+                        false
+                    )
+                end
+            end
+
+            button.BackgroundColor3 =
+                C.Selected
+
+            button:SetAttribute(
+                "VensSelected",
+                true
+            )
+        end
+    )
+end
 
 local function RefreshEggList()
 
     ClearEggList()
 
     local query =
-        NormalizeName(
-            SearchBox.Text
-        )
+        NormalizeName(SearchBox.Text)
 
-    local shown = 0
+    local count = 0
 
-    for index, egg in ipairs(
-        State.Eggs
-    ) do
+    for _, egg in ipairs(State.Eggs) do
 
         if query == ""
-            or NormalizeName(
-                egg.Name
-            ):find(
-                query,
-                1,
-                true
-            ) then
+            or NormalizeName(egg.Name)
+                :find(query, 1, true) then
 
-            shown += 1
+            count += 1
 
-            local button =
-                Instance.new(
-                    "TextButton"
-                )
-
-            button.Size =
-                UDim2.new(1, -2, 0, 27)
-
-            button.BackgroundColor3 =
-                C.Button
-
-            button.BorderSizePixel = 0
-
-            button.Text = ""
-
-            button.AutoButtonColor =
-                false
-
-            button.ZIndex = 30
-            button.Parent = EggList
-
-            Corner(button, 6)
-
-
-            local name =
-                Label(
-                    button,
-                    egg.Name,
-                    UDim2.new(0.62, 0, 1, 0),
-                    UDim2.fromOffset(8, 0),
-                    10,
-                    C.White
-                )
-
-            name.ZIndex = 31
-
-
-            local distance =
-                Label(
-                    button,
-                    math.floor(
-                        egg.Distance
-                    ) .. " studs",
-                    UDim2.new(
-                        0.38,
-                        -8,
-                        1,
-                        0
-                    ),
-                    UDim2.new(
-                        0.62,
-                        0,
-                        0,
-                        0
-                    ),
-                    9,
-                    C.PurpleText
-                )
-
-            distance.TextXAlignment =
-                Enum.TextXAlignment.Right
-
-            distance.ZIndex = 31
-
-
-            if State.SelectedObject ==
-                egg.Object then
-
-                button.BackgroundColor3 =
-                    C.Selected
-            end
-
-
-            Connect(
-                button.Activated,
-                function()
-
-                    State.SelectedEgg =
-                        egg.Name
-
-                    State.SelectedObject =
-                        egg.Object
-
-                    SelectedLabel.Text =
-                        "Selected: "
-                        .. egg.Name
-
-                    DashSelected.Text =
-                        "Selected Egg: "
-                        .. egg.Name
-
-                    for _, row in ipairs(
-                        EggList:GetChildren()
-                    ) do
-
-                        if row:IsA(
-                            "TextButton"
-                        ) then
-
-                            row.BackgroundColor3 =
-                                C.Button
-                        end
-                    end
-
-                    button.BackgroundColor3 =
-                        C.Selected
-
-                    AddActivity(
-                        "Egg selected",
-                        egg.Name,
-                        "SELECT"
-                    )
-                end
-            )
+            AddEggRow(egg)
         end
     end
 
-    if shown == 0 then
+    if count == 0 then
 
         local empty =
             Label(
                 EggList,
                 "No egg > 500 studs",
                 UDim2.new(1, -2, 0, 27),
-                UDim2.fromOffset(0, 0),
+                UDim2.new(),
                 10,
                 C.Gray
             )
@@ -2065,11 +2112,53 @@ local function RefreshEggList()
         .. #State.Eggs
 end
 
+--========================================================
+-- SCAN REFRESH
+--========================================================
 
-local function ScanAndRefresh()
+local function ScanAndRefresh(force)
 
-    State.Eggs =
+    local results =
         ScanEggs()
+
+    local signatureTable = {}
+
+    for _, egg in ipairs(results) do
+
+        signatureTable[#signatureTable + 1] =
+            NormalizeName(egg.Name)
+            .. ":"
+            .. math.floor(egg.Position.X / 15)
+            .. ":"
+            .. math.floor(egg.Position.Y / 15)
+            .. ":"
+            .. math.floor(egg.Position.Z / 15)
+    end
+
+    local signature =
+        table.concat(
+            signatureTable,
+            "|"
+        )
+
+    State.Eggs = results
+
+    State.EggMap = {}
+
+    for _, egg in ipairs(results) do
+
+        local key =
+            NormalizeName(egg.Name)
+
+        local old =
+            State.EggMap[key]
+
+        if not old
+            or egg.Distance < old.Distance then
+
+            State.EggMap[key] = egg
+        end
+    end
 
     if State.SelectedObject
         and not State.SelectedObject.Parent then
@@ -2084,13 +2173,65 @@ local function ScanAndRefresh()
             "Selected Egg: None"
     end
 
-    RefreshEggList()
-end
+    if force
+        or signature ~= State.LastScanSignature then
 
+        State.LastScanSignature =
+            signature
+
+        RefreshEggList()
+
+        if State.ESP then
+            RefreshESP()
+        end
+    end
+
+    return results
+end
 
 --========================================================
 -- INTERACTION
 --========================================================
+
+local function FindSelectedEgg()
+
+    if State.SelectedObject
+        and State.SelectedObject.Parent
+        and State.SelectedEgg then
+
+        local name =
+            GetEggName(
+                State.SelectedObject
+            )
+
+        if name
+            and NormalizeName(name)
+                == NormalizeName(State.SelectedEgg) then
+
+            return State.SelectedObject
+        end
+    end
+
+    if State.SelectedEgg then
+
+        local wanted =
+            NormalizeName(State.SelectedEgg)
+
+        for _, egg in ipairs(State.Eggs) do
+
+            if NormalizeName(egg.Name)
+                == wanted then
+
+                State.SelectedObject =
+                    egg.Object
+
+                return egg.Object
+            end
+        end
+    end
+
+    return nil
+end
 
 local function FindInteraction(object)
 
@@ -2098,12 +2239,8 @@ local function FindInteraction(object)
         return nil
     end
 
-    if object:IsA(
-        "ProximityPrompt"
-    )
-    or object:IsA(
-        "ClickDetector"
-    ) then
+    if object:IsA("ProximityPrompt")
+        or object:IsA("ClickDetector") then
 
         return object
     end
@@ -2124,28 +2261,28 @@ local function FindInteraction(object)
     )
 end
 
-
 local function Interact(object)
+
+    if not object
+        or not object.Parent then
+        return false
+    end
 
     local interaction =
         FindInteraction(object)
 
-    if not interaction then
+    if not interaction
+        or not interaction.Parent then
         return false
     end
 
+    if interaction:IsA("ProximityPrompt") then
 
-    if interaction:IsA(
-        "ProximityPrompt"
-    ) then
-
-        if typeof(
-            fireproximityprompt
-        ) == "function" then
+        if typeof(fireproximityprompt)
+            == "function" then
 
             local success =
                 pcall(function()
-
                     fireproximityprompt(
                         interaction,
                         1,
@@ -2154,67 +2291,38 @@ local function Interact(object)
                 end)
 
             if success then
-
-                State.InteractionCount += 1
-
                 return true
             end
         end
 
+        return pcall(function()
 
-        local success =
-            pcall(function()
+            interaction:InputHoldBegin()
 
-                interaction:
-                    InputHoldBegin()
-
-                task.wait(
-                    math.max(
-                        0.08,
-                        tonumber(
-                            interaction.HoldDuration
-                        )
-                        or 0.08
-                    )
+            task.wait(
+                math.max(
+                    0.08,
+                    tonumber(
+                        interaction.HoldDuration
+                    ) or 0.08
                 )
+            )
 
-                interaction:
-                    InputHoldEnd()
-            end)
-
-        if success then
-            State.InteractionCount += 1
-        end
-
-        return success
+            interaction:InputHoldEnd()
+        end)
     end
 
+    if interaction:IsA("ClickDetector")
+        and typeof(fireclickdetector)
+            == "function" then
 
-    if interaction:IsA(
-        "ClickDetector"
-    )
-    and typeof(
-        fireclickdetector
-    ) == "function" then
-
-        local success =
-            pcall(function()
-
-                fireclickdetector(
-                    interaction
-                )
-            end)
-
-        if success then
-            State.InteractionCount += 1
-        end
-
-        return success
+        return pcall(function()
+            fireclickdetector(interaction)
+        end)
     end
 
     return false
 end
-
 
 --========================================================
 -- TRAVEL
@@ -2222,13 +2330,12 @@ end
 
 local function StopTravel()
 
-    State.TravelToken += 1
-
     State.Travel = false
     State.Returning = false
 
-    local root =
-        GetRoot()
+    State.TravelToken += 1
+
+    local root = GetRoot()
 
     if root then
         root.AssemblyLinearVelocity =
@@ -2239,17 +2346,14 @@ local function StopTravel()
         "Travel: Stopped"
 end
 
-
 local function TravelToEgg(object)
 
     if not object
         or not object.Parent then
-
         return false
     end
 
-    local root =
-        GetRoot()
+    local root = GetRoot()
 
     if not root then
         return false
@@ -2263,26 +2367,14 @@ local function TravelToEgg(object)
     State.Travel = true
     State.Returning = false
 
-    State.TravelCount += 1
-
     DashTravel.Text =
-        "Travel: Travelling"
+        "Travel: Travelling to Egg"
 
-    AddActivity(
-        "Travel started",
-        GetEggName(object)
-            or "Unknown Egg",
-        "TRAVEL"
-    )
-
-
-    while
-        State.Travel
-        and token ==
-            State.TravelToken
+    while State.Travel
+        and not State.Returning
+        and token == State.TravelToken
         and object
-        and object.Parent
-    do
+        and object.Parent do
 
         root = GetRoot()
 
@@ -2308,22 +2400,16 @@ local function TravelToEgg(object)
             root.AssemblyLinearVelocity =
                 Vector3.zero
 
-            DashTravel.Text =
-                "Travel: Arrived"
-
             return true
         end
 
-        if distance > 0 then
-
-            root.AssemblyLinearVelocity =
-                offset.Unit
-                * math.clamp(
-                    State.TravelSpeed,
-                    1,
-                    1000
-                )
-        end
+        root.AssemblyLinearVelocity =
+            offset.Unit
+            * math.clamp(
+                State.TravelSpeed,
+                1,
+                1000
+            )
 
         RunService.Heartbeat:Wait()
     end
@@ -2336,18 +2422,17 @@ local function TravelToEgg(object)
     return false
 end
 
-
 local function ReturnToSpawn()
 
     if not State.Spawn then
-
-        if not SaveSpawn() then
-            return false
-        end
+        SaveSpawn()
     end
 
-    local root =
-        GetRoot()
+    if not State.Spawn then
+        return false
+    end
+
+    local root = GetRoot()
 
     if not root then
         return false
@@ -2362,18 +2447,14 @@ local function ReturnToSpawn()
     State.Returning = true
 
     DashTravel.Text =
-        "Travel: Returning"
+        "Travel: Returning to Spawn"
 
     local target =
         State.Spawn.Position
 
-
-    while
-        State.Travel
+    while State.Travel
         and State.Returning
-        and token ==
-            State.TravelToken
-    do
+        and token == State.TravelToken do
 
         root = GetRoot()
 
@@ -2401,25 +2482,16 @@ local function ReturnToSpawn()
             DashTravel.Text =
                 "Travel: At Spawn"
 
-            AddActivity(
-                "Returned to spawn",
-                "Saved spawn",
-                "TRAVEL"
-            )
-
             return true
         end
 
-        if distance > 0 then
-
-            root.AssemblyLinearVelocity =
-                offset.Unit
-                * math.clamp(
-                    State.TravelSpeed,
-                    1,
-                    1000
-                )
-        end
+        root.AssemblyLinearVelocity =
+            offset.Unit
+            * math.clamp(
+                State.TravelSpeed,
+                1,
+                1000
+            )
 
         RunService.Heartbeat:Wait()
     end
@@ -2432,7 +2504,6 @@ local function ReturnToSpawn()
     return false
 end
 
-
 local function TakeSelectedEgg()
 
     if not State.SelectedEgg then
@@ -2444,16 +2515,7 @@ local function TakeSelectedEgg()
     end
 
     local object =
-        State.SelectedObject
-
-    if not object
-        or not object.Parent then
-
-        ScanAndRefresh()
-
-        object =
-            State.SelectedObject
-    end
+        FindSelectedEgg()
 
     if not object then
 
@@ -2462,7 +2524,6 @@ local function TakeSelectedEgg()
 
         return
     end
-
 
     task.spawn(function()
 
@@ -2477,302 +2538,14 @@ local function TakeSelectedEgg()
 
             task.wait(0.12)
 
-            local success =
-                Interact(object)
-
-            if success then
-
-                AddActivity(
-                    "Egg interaction",
-                    GetEggName(object)
-                        or "Egg",
-                    "TAKE"
-                )
-            else
-
-                AddActivity(
-                    "Interaction failed",
-                    GetEggName(object)
-                        or "Egg",
-                    "ERROR"
-                )
-            end
+            Interact(object)
         end
     end)
 end
 
-
 --========================================================
--- AUTO PAGE
+-- AUTO SYSTEM
 --========================================================
-
-local AutoPage =
-    Pages["Auto"]
-
-PageHeader(
-    AutoPage,
-    "Auto Egg",
-    "Automatic egg selection and collection"
-)
-
-
-local AutoStatus =
-    Label(
-        AutoPage,
-        "Status: OFF",
-        UDim2.new(1, -24, 0, 18),
-        UDim2.fromOffset(12, 54),
-        10,
-        C.Gray
-    )
-
-
-local AutoSelectedLabel =
-    Label(
-        AutoPage,
-        "Selected Eggs: 0",
-        UDim2.new(1, -24, 0, 20),
-        UDim2.fromOffset(12, 78),
-        10,
-        C.PurpleText
-    )
-
-
-local SelectEggButton =
-    Button(
-        AutoPage,
-        "▣  SELECT EGG",
-        UDim2.fromOffset(150, 34),
-        UDim2.fromOffset(12, 106)
-    )
-
-
-local SelectAllEggsButton =
-    Button(
-        AutoPage,
-        "✓  ALL",
-        UDim2.fromOffset(82, 34),
-        UDim2.fromOffset(170, 106)
-    )
-
-
-local ClearAllEggsButton =
-    Button(
-        AutoPage,
-        "×  CLEAR",
-        UDim2.fromOffset(70, 34),
-        UDim2.fromOffset(260, 106)
-    )
-
-
-local AutoEggButton =
-    Button(
-        AutoPage,
-        "AUTO EGG  •  OFF",
-        UDim2.fromOffset(96, 31),
-        UDim2.fromOffset(12, 153)
-    )
-
-
-local AutoInstantButton =
-    Button(
-        AutoPage,
-        "INSTANT  •  OFF",
-        UDim2.fromOffset(96, 31),
-        UDim2.fromOffset(114, 153)
-    )
-
-
-local AutoStopButton =
-    Button(
-        AutoPage,
-        "■  STOP",
-        UDim2.fromOffset(96, 31),
-        UDim2.fromOffset(216, 153)
-    )
-
-
-local NoclipButton =
-    Button(
-        AutoPage,
-        "NOCLIP  •  OFF",
-        UDim2.fromOffset(96, 31),
-        UDim2.fromOffset(12, 192)
-    )
-
-
-local AutoHint =
-    Label(
-        AutoPage,
-        "Select egg types first. Scanner only uses eggs > 500 studs.",
-        UDim2.new(1, -24, 0, 30),
-        UDim2.fromOffset(12, 231),
-        9,
-        C.Gray
-    )
-
-AutoHint.TextWrapped = true
-AutoHint.TextYAlignment =
-    Enum.TextYAlignment.Top
-
-
---========================================================
--- AUTO SELECTOR
---========================================================
-
-local AutoSelector =
-    Instance.new("Frame")
-
-AutoSelector.Size =
-    UDim2.fromOffset(324, 258)
-
-AutoSelector.Position =
-    UDim2.fromOffset(12, 25)
-
-AutoSelector.BackgroundColor3 =
-    Color3.fromRGB(9, 8, 13)
-
-AutoSelector.BorderSizePixel = 0
-
-AutoSelector.Visible = false
-
-AutoSelector.ZIndex = 80
-AutoSelector.Active = true
-AutoSelector.Parent = AutoPage
-
-Corner(AutoSelector, 14)
-
-Stroke(
-    AutoSelector,
-    C.Purple,
-    1.4,
-    0.12
-)
-
-
-local SelectorTitle =
-    Label(
-        AutoSelector,
-        "SELECT EGG",
-        UDim2.new(1, -75, 0, 27),
-        UDim2.fromOffset(14, 8),
-        15,
-        C.White
-    )
-
-SelectorTitle.Font =
-    Enum.Font.GothamBold
-
-
-local SelectorCount =
-    Label(
-        AutoSelector,
-        "0 selected",
-        UDim2.fromOffset(90, 20),
-        UDim2.new(1, -102, 0, 11),
-        9,
-        C.PurpleText
-    )
-
-SelectorCount.TextXAlignment =
-    Enum.TextXAlignment.Right
-
-
-local SelectorClose =
-    Button(
-        AutoSelector,
-        "×",
-        UDim2.fromOffset(28, 28),
-        UDim2.new(1, -42, 0, 8)
-    )
-
-SelectorClose.TextSize = 17
-
-
-local SelectorSearch =
-    Input(
-        AutoSelector,
-        "Search egg type...",
-        ""
-    )
-
-SelectorSearch.Size =
-    UDim2.new(1, -28, 0, 31)
-
-SelectorSearch.Position =
-    UDim2.fromOffset(14, 57)
-
-
-local SelectorList =
-    Instance.new("ScrollingFrame")
-
-SelectorList.Size =
-    UDim2.new(1, -28, 0, 119)
-
-SelectorList.Position =
-    UDim2.fromOffset(14, 94)
-
-SelectorList.BackgroundColor3 =
-    Color3.fromRGB(5, 5, 8)
-
-SelectorList.BorderSizePixel = 0
-
-SelectorList.ScrollBarThickness = 3
-
-SelectorList.ScrollBarImageColor3 =
-    C.Purple
-
-SelectorList.CanvasSize =
-    UDim2.new()
-
-SelectorList.AutomaticCanvasSize =
-    Enum.AutomaticSize.Y
-
-SelectorList.ZIndex = 82
-SelectorList.Parent = AutoSelector
-
-Corner(SelectorList, 9)
-
-
-local SelectorLayout =
-    Instance.new("UIListLayout")
-
-SelectorLayout.Padding =
-    UDim.new(0, 4)
-
-SelectorLayout.SortOrder =
-    Enum.SortOrder.LayoutOrder
-
-SelectorLayout.Parent =
-    SelectorList
-
-
-local SelectorSelectAll =
-    Button(
-        AutoSelector,
-        "✓  SELECT ALL",
-        UDim2.fromOffset(94, 29),
-        UDim2.fromOffset(14, 222)
-    )
-
-
-local SelectorClear =
-    Button(
-        AutoSelector,
-        "×  CLEAR",
-        UDim2.fromOffset(94, 29),
-        UDim2.fromOffset(114, 222)
-    )
-
-
-local SelectorDone =
-    Button(
-        AutoSelector,
-        "DONE  ✓",
-        UDim2.fromOffset(94, 29),
-        UDim2.fromOffset(214, 222)
-    )
-
 
 local function AutoCount()
 
@@ -2790,186 +2563,10 @@ local function AutoCount()
     return count
 end
 
-
-local function RefreshAutoSelector()
-
-    for _, child in ipairs(
-        SelectorList:GetChildren()
-    ) do
-
-        if child:IsA("TextButton")
-            or child:IsA("TextLabel") then
-
-            child:Destroy()
-        end
-    end
-
-
-    local names = {}
-
-    for _, egg in ipairs(
-        State.Eggs
-    ) do
-
-        local key =
-            NormalizeName(
-                egg.Name
-            )
-
-        if key ~= "" then
-            names[key] =
-                egg.Name
-        end
-    end
-
-
-    local list = {}
-
-    for _, name in pairs(names) do
-        table.insert(
-            list,
-            name
-        )
-    end
-
-
-    table.sort(
-        list,
-        function(a, b)
-
-            return NormalizeName(a)
-                < NormalizeName(b)
-        end
-    )
-
-
-    local search =
-        NormalizeName(
-            SelectorSearch.Text
-        )
-
-    local shown = 0
-
-
-    for _, name in ipairs(list) do
-
-        local key =
-            NormalizeName(name)
-
-        if search == ""
-            or key:find(
-                search,
-                1,
-                true
-            ) then
-
-            shown += 1
-
-            local selected =
-                State.AutoSelected[key]
-                == true
-
-            local row =
-                Button(
-                    SelectorList,
-                    name,
-                    UDim2.new(
-                        1,
-                        -2,
-                        0,
-                        29
-                    ),
-                    UDim2.fromOffset(
-                        0,
-                        0
-                    )
-                )
-
-            row.TextXAlignment =
-                Enum.TextXAlignment.Left
-
-            row.TextSize = 10
-
-            row.BackgroundColor3 =
-                selected
-                and C.Selected
-                or C.Button
-
-            row:SetAttribute(
-                "VensSelected",
-                selected
-            )
-
-
-            Connect(
-                row.Activated,
-                function()
-
-                    State.AutoSelected[key] =
-                        not State.AutoSelected[key]
-
-                    RefreshAutoSelector()
-                end
-            )
-        end
-    end
-
-
-    if shown == 0 then
-
-        local empty =
-            Label(
-                SelectorList,
-                "No egg type found",
-                UDim2.new(1, -8, 0, 28),
-                UDim2.fromOffset(4, 4),
-                10,
-                C.Gray
-            )
-
-        empty.TextXAlignment =
-            Enum.TextXAlignment.Center
-
-        empty.ZIndex = 84
-    end
-
-
-    local count =
-        AutoCount()
-
-    SelectorCount.Text =
-        tostring(count)
-        .. " selected"
-
-    AutoSelectedLabel.Text =
-        "Selected Eggs: "
-        .. tostring(count)
-end
-
-
-local function SetAllAuto(value)
-
-    for _, egg in ipairs(
-        State.Eggs
-    ) do
-
-        State.AutoSelected[
-            NormalizeName(
-                egg.Name
-            )
-        ] = value
-    end
-
-    RefreshAutoSelector()
-end
-
-
 local function IsAutoRunning()
-
     return State.AutoEgg
         or State.AutoInstant
 end
-
 
 local function StopAuto()
 
@@ -2981,7 +2578,13 @@ local function StopAuto()
     AutoEggButton.Text =
         "AUTO EGG  •  OFF"
 
+    AutoInstantButton.Text =
+        "INSTANT  •  OFF"
+
     AutoEggButton.BackgroundColor3 =
+        C.Button
+
+    AutoInstantButton.BackgroundColor3 =
         C.Button
 
     AutoEggButton:SetAttribute(
@@ -2989,38 +2592,85 @@ local function StopAuto()
         false
     )
 
-
-    AutoInstantButton.Text =
-        "INSTANT  •  OFF"
-
-    AutoInstantButton.BackgroundColor3 =
-        C.Button
-
     AutoInstantButton:SetAttribute(
         "VensSelected",
         false
     )
 
-
     AutoStatus.Text =
-        "Status: OFF"
-
+        "Status: OFF • waiting for selection"
 
     DashAuto.Text =
         "Auto: OFF"
+
+    StopTravel()
 end
 
+local function InstantTeleportAndInteract(object)
 
-local function StartAutoEgg()
-
-    if AutoCount() <= 0 then
-
-        AutoStatus.Text =
-            "Status: Select egg first"
-
-        return
+    if not object
+        or not object.Parent then
+        return false
     end
 
+    local root = GetRoot()
+
+    if not root then
+        return false
+    end
+
+    local position =
+        GetObjectPosition(object)
+
+    if not position then
+        return false
+    end
+
+    root.CFrame =
+        CFrame.new(
+            position
+            + Vector3.new(0, 3, 0)
+        )
+
+    root.AssemblyLinearVelocity =
+        Vector3.zero
+
+    task.wait(0.15)
+
+    local interaction =
+        FindInteraction(object)
+
+    if not interaction then
+        task.wait(0.15)
+
+        interaction =
+            FindInteraction(object)
+    end
+
+    if not interaction then
+        return false
+    end
+
+    local success =
+        Interact(object)
+
+    task.wait(0.15)
+
+    root = GetRoot()
+
+    if root and State.Spawn then
+
+        root.CFrame =
+            State.Spawn
+
+        root.AssemblyLinearVelocity =
+            Vector3.zero
+    end
+
+    return success
+end
+
+local function StartAutoEgg()
 
     StopAuto()
 
@@ -3042,163 +2692,115 @@ local function StartAutoEgg()
         true
     )
 
-    AutoStatus.Text =
-        "Status: AUTO EGG"
-
     DashAuto.Text =
         "Auto: Egg"
-
-    AddActivity(
-        "Auto Egg started",
-        tostring(
-            AutoCount()
-        ) .. " egg types",
-        "AUTO"
-    )
-
 
     task.spawn(function()
 
         local processed = {}
 
+        while token == State.AutoToken
+            and State.AutoEgg do
 
-        while
-            State.AutoEgg
-            and token ==
-                State.AutoToken
-        do
+            if AutoCount() <= 0 then
 
-            ScanAndRefresh()
+                AutoStatus.Text =
+                    "Status: Select egg first"
 
+                task.wait(0.5)
+                continue
+            end
 
-            for object in pairs(
-                processed
-            ) do
+            ScanAndRefresh(false)
+
+            for object in pairs(processed) do
 
                 if not object
                     or not object.Parent then
 
-                    processed[object] =
-                        nil
+                    processed[object] = nil
                 end
             end
 
-
             local target
 
-
-            for _, egg in ipairs(
-                State.Eggs
-            ) do
+            for _, egg in ipairs(State.Eggs) do
 
                 local key =
-                    NormalizeName(
-                        egg.Name
-                    )
+                    NormalizeName(egg.Name)
 
                 if State.AutoSelected[key]
                     and egg.Object
                     and egg.Object.Parent
-                    and not processed[
-                        egg.Object
-                    ] then
+                    and egg.Distance > MIN_SCAN_DISTANCE
+                    and not processed[egg.Object] then
 
                     target = egg
-
                     break
                 end
             end
 
-
             if not target then
 
                 AutoStatus.Text =
-                    "Status: Waiting..."
+                    "Status: Egg Not Found"
 
-                task.wait(0.6)
-
+                task.wait(0.5)
                 continue
             end
 
-
-            State.AutoCount += 1
+            local object =
+                target.Object
 
             AutoStatus.Text =
-                "Taking: "
+                "Status: Taking "
                 .. target.Name
-
 
             StopTravel()
 
             local reached =
-                TravelToEgg(
-                    target.Object
-                )
-
+                TravelToEgg(object)
 
             if reached
+                and token == State.AutoToken
                 and State.AutoEgg
-                and token ==
-                    State.AutoToken then
+                and object
+                and object.Parent then
 
-                task.wait(0.1)
+                task.wait(0.12)
 
                 local success =
-                    Interact(
-                        target.Object
-                    )
+                    Interact(object)
 
                 if success then
 
-                    processed[
-                        target.Object
-                    ] = true
+                    processed[object] = true
 
-                    AddActivity(
-                        "Auto Egg",
-                        target.Name,
-                        "AUTO"
-                    )
+                    AutoStatus.Text =
+                        "Status: Taken "
+                        .. target.Name
 
                     task.wait(0.2)
 
-                    if State.Spawn
-                        and State.AutoEgg
-                        and token ==
-                            State.AutoToken then
-
+                    if State.Spawn then
                         ReturnToSpawn()
                     end
 
                 else
 
-                    AddActivity(
-                        "Auto interaction failed",
-                        target.Name,
-                        "ERROR"
-                    )
+                    AutoStatus.Text =
+                        "Status: Interaction Failed"
 
-                    task.wait(0.5)
+                    task.wait(0.35)
                 end
-            else
-
-                task.wait(0.3)
             end
+
+            task.wait(0.2)
         end
     end)
 end
 
-
 local function StartAutoInstant()
-
-    if AutoCount() <= 0 then
-
-        AutoStatus.Text =
-            "Status: Select egg first"
-
-        return
-    end
-
 
     StopAuto()
 
@@ -3220,451 +2822,772 @@ local function StartAutoInstant()
         true
     )
 
-    AutoStatus.Text =
-        "Status: INSTANT"
-
     DashAuto.Text =
         "Auto: Instant"
-
-    AddActivity(
-        "Auto Instant started",
-        tostring(
-            AutoCount()
-        ) .. " egg types",
-        "AUTO"
-    )
-
 
     task.spawn(function()
 
         local processed = {}
 
+        while token == State.AutoToken
+            and State.AutoInstant do
 
-        while
-            State.AutoInstant
-            and token ==
-                State.AutoToken
-        do
+            if AutoCount() <= 0 then
 
-            ScanAndRefresh()
+                AutoStatus.Text =
+                    "Status: Select egg first"
 
+                task.wait(0.5)
+                continue
+            end
+
+            ScanAndRefresh(false)
+
+            for object in pairs(processed) do
+
+                if not object
+                    or not object.Parent then
+
+                    processed[object] = nil
+                end
+            end
 
             local target
 
-
-            for _, egg in ipairs(
-                State.Eggs
-            ) do
+            for _, egg in ipairs(State.Eggs) do
 
                 local key =
-                    NormalizeName(
-                        egg.Name
-                    )
+                    NormalizeName(egg.Name)
 
                 if State.AutoSelected[key]
                     and egg.Object
                     and egg.Object.Parent
-                    and not processed[
-                        egg.Object
-                    ] then
+                    and egg.Distance > MIN_SCAN_DISTANCE
+                    and not processed[egg.Object] then
 
                     target = egg
-
                     break
                 end
             end
 
-
             if not target then
 
                 AutoStatus.Text =
-                    "Status: Waiting..."
+                    "Status: Egg Not Found"
 
-                task.wait(0.6)
-
+                task.wait(0.5)
                 continue
             end
 
+            local object =
+                target.Object
 
-            local root =
-                GetRoot()
+            AutoStatus.Text =
+                "Status: Taking "
+                .. target.Name
 
-            local position =
-                GetObjectPosition(
-                    target.Object
+            local success =
+                InstantTeleportAndInteract(
+                    object
                 )
 
+            if success then
 
-            if root and position then
-
-                State.InstantCount += 1
+                processed[object] = true
 
                 AutoStatus.Text =
-                    "Instant: "
+                    "Status: Taken "
                     .. target.Name
 
+            else
 
-                root.CFrame =
-                    CFrame.new(
-                        position
-                        + Vector3.new(
-                            0,
-                            3,
-                            0
-                        )
-                    )
+                AutoStatus.Text =
+                    "Status: Interaction Failed"
 
-                root.AssemblyLinearVelocity =
-                    Vector3.zero
-
-                task.wait(0.12)
-
-
-                local success =
-                    Interact(
-                        target.Object
-                    )
-
-
-                if success then
-
-                    processed[
-                        target.Object
-                    ] = true
-
-                    AddActivity(
-                        "Instant Egg",
-                        target.Name,
-                        "AUTO"
-                    )
-
-
-                    task.wait(0.2)
-
-
-                    if State.Spawn
-                        and State.AutoInstant
-                        and token ==
-                            State.AutoToken then
-
-                        root =
-                            GetRoot()
-
-                        if root then
-
-                            root.CFrame =
-                                State.Spawn
-
-                            root.AssemblyLinearVelocity =
-                                Vector3.zero
-                        end
-                    end
-
-                else
-
-                    AddActivity(
-                        "Instant interaction failed",
-                        target.Name,
-                        "ERROR"
-                    )
-
-                    task.wait(0.5)
-                end
+                task.wait(0.5)
             end
+
+            task.wait(0.25)
         end
     end)
 end
 
+--========================================================
+-- SELECTOR
+--========================================================
+
+local AutoSelectedNames = {}
+
+local SelectorConnections = {}
+
+local function ClearSelectorConnections()
+
+    for _, connection in ipairs(
+        SelectorConnections
+    ) do
+
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+
+    table.clear(SelectorConnections)
+end
+
+local function SelectorConnect(
+    signal,
+    callback
+)
+
+    local connection =
+        signal:Connect(callback)
+
+    table.insert(
+        SelectorConnections,
+        connection
+    )
+
+    return connection
+end
+
+for _, eggName in ipairs(KnownEggs) do
+
+    local key =
+        NormalizeName(eggName)
+
+    AutoSelectedNames[key] =
+        eggName
+end
+
+local function UpdateAutoSelection()
+
+    local count =
+        AutoCount()
+
+    AutoSelectedLabel.Text =
+        "Selected Eggs: "
+        .. count
+
+    SelectorCount.Text =
+        tostring(count)
+        .. " selected"
+end
+
+local RefreshAutoSelector
+
+RefreshAutoSelector = function()
+
+    ClearSelectorConnections()
+
+    for _, child in ipairs(
+        SelectorList:GetChildren()
+    ) do
+
+        if child:IsA("TextButton")
+            or child:IsA("TextLabel") then
+
+            child:Destroy()
+        end
+    end
+
+    local names = {}
+
+    for key, name in pairs(
+        AutoSelectedNames
+    ) do
+
+        names[#names + 1] = name
+    end
+
+    table.sort(
+        names,
+        function(a, b)
+            return NormalizeName(a)
+                < NormalizeName(b)
+        end
+    )
+
+    local search =
+        NormalizeName(
+            SelectorSearch.Text
+        )
+
+    local found = 0
+
+    for _, eggName in ipairs(names) do
+
+        local key =
+            NormalizeName(eggName)
+
+        if search == ""
+            or key:find(
+                search,
+                1,
+                true
+            ) then
+
+            found += 1
+
+            local selected =
+                State.AutoSelected[key] == true
+
+            local row =
+                Instance.new("TextButton")
+
+            row.Size =
+                UDim2.new(1, -2, 0, 29)
+
+            row.BackgroundColor3 =
+                selected
+                and C.Selected
+                or C.Button
+
+            row.BackgroundTransparency =
+                selected
+                and 0.02
+                or 0.04
+
+            row.BorderSizePixel = 0
+            row.Text = ""
+            row.AutoButtonColor = false
+            row.ZIndex = 84
+
+            row.Parent = SelectorList
+
+            Corner(row, 7)
+
+            Stroke(
+                row,
+                selected
+                and C.Purple
+                or Color3.fromRGB(
+                    48,
+                    42,
+                    60
+                ),
+                1,
+                selected
+                and 0.15
+                or 0.55
+            )
+
+            local checkBox =
+                Instance.new("Frame")
+
+            checkBox.Size =
+                UDim2.fromOffset(20, 20)
+
+            checkBox.Position =
+                UDim2.fromOffset(6, 4)
+
+            checkBox.BackgroundColor3 =
+                selected
+                and C.Purple
+                or C.Panel2
+
+            checkBox.BorderSizePixel = 0
+            checkBox.ZIndex = 85
+            checkBox.Parent = row
+
+            Corner(checkBox, 6)
+
+            local check =
+                Label(
+                    checkBox,
+                    selected
+                    and "✓"
+                    or "",
+                    UDim2.fromScale(1, 1),
+                    UDim2.fromOffset(0, 0),
+                    11,
+                    C.White
+                )
+
+            check.TextXAlignment =
+                Enum.TextXAlignment.Center
+
+            check.ZIndex = 86
+
+            local nameLabel =
+                Label(
+                    row,
+                    eggName,
+                    UDim2.new(1, -40, 1, 0),
+                    UDim2.fromOffset(34, 0),
+                    10,
+                    C.White
+                )
+
+            nameLabel.ZIndex = 85
+
+            SelectorConnect(
+                row.Activated,
+                function()
+
+                    State.AutoSelected[key] =
+                        not State.AutoSelected[key]
+
+                    UpdateAutoSelection()
+
+                    RefreshAutoSelector()
+                end
+            )
+        end
+    end
+
+    if found == 0 then
+
+        local empty =
+            Label(
+                SelectorList,
+                "No egg type found",
+                UDim2.new(1, -10, 0, 30),
+                UDim2.fromOffset(5, 5),
+                10,
+                C.Gray
+            )
+
+        empty.TextXAlignment =
+            Enum.TextXAlignment.Center
+
+        empty.ZIndex = 84
+    end
+
+    UpdateAutoSelection()
+end
+
+local function SetAllAutoEggs(value)
+
+    for key in pairs(
+        AutoSelectedNames
+    ) do
+
+        State.AutoSelected[key] =
+            value
+    end
+
+    RefreshAutoSelector()
+end
+
+local function OpenAutoSelector()
+
+    RefreshAutoSelector()
+
+    AutoSelector.Visible = true
+end
+
+local function CloseAutoSelector()
+
+    AutoSelector.Visible = false
+end
+
+--========================================================
+-- FLY
+--========================================================
+
+local FlyConnection = nil
+
+local function StopFly()
+
+    State.Fly = false
+
+    if FlyConnection then
+
+        pcall(function()
+            FlyConnection:Disconnect()
+        end)
+
+        FlyConnection = nil
+    end
+
+    local root = GetRoot()
+
+    if root then
+        root.AssemblyLinearVelocity =
+            Vector3.zero
+    end
+
+    if FlyButton
+        and FlyButton.Parent then
+
+        FlyButton.Text =
+            "FLY: OFF"
+
+        FlyButton.BackgroundColor3 =
+            C.Button
+
+        FlyButton:SetAttribute(
+            "VensSelected",
+            false
+        )
+    end
+end
+
+local function StartFly()
+
+    if State.Travel
+        or State.Returning
+        or IsAutoRunning() then
+
+        return
+    end
+
+    StopFly()
+
+    State.Fly = true
+
+    FlyButton.Text =
+        "FLY: ON"
+
+    FlyButton.BackgroundColor3 =
+        C.Selected
+
+    FlyButton:SetAttribute(
+        "VensSelected",
+        true
+    )
+
+    FlyConnection =
+        RunService.RenderStepped:Connect(
+            function()
+
+                if not State.Fly
+                    or State.Travel
+                    or State.Returning
+                    or IsAutoRunning() then
+
+                    return
+                end
+
+                local root =
+                    GetRoot()
+
+                if not root then
+
+                    StopFly()
+                    return
+                end
+
+                local camera =
+                    workspace.CurrentCamera
+
+                if not camera then
+                    return
+                end
+
+                local move =
+                    Vector3.zero
+
+                if UIS:IsKeyDown(
+                    Enum.KeyCode.W
+                ) then
+                    move +=
+                        camera.CFrame.LookVector
+                end
+
+                if UIS:IsKeyDown(
+                    Enum.KeyCode.S
+                ) then
+                    move -=
+                        camera.CFrame.LookVector
+                end
+
+                if UIS:IsKeyDown(
+                    Enum.KeyCode.A
+                ) then
+                    move -=
+                        camera.CFrame.RightVector
+                end
+
+                if UIS:IsKeyDown(
+                    Enum.KeyCode.D
+                ) then
+                    move +=
+                        camera.CFrame.RightVector
+                end
+
+                if UIS:IsKeyDown(
+                    Enum.KeyCode.Space
+                ) then
+                    move +=
+                        Vector3.yAxis
+                end
+
+                if UIS:IsKeyDown(
+                    Enum.KeyCode.LeftControl
+                ) then
+                    move -=
+                        Vector3.yAxis
+                end
+
+                if move.Magnitude > 0 then
+
+                    move =
+                        move.Unit
+
+                    root.AssemblyLinearVelocity =
+                        move
+                        * math.clamp(
+                            State.FlySpeed,
+                            1,
+                            1000
+                        )
+                else
+
+                    root.AssemblyLinearVelocity =
+                        Vector3.zero
+                end
+            end
+        )
+end
+
+--========================================================
+-- BUTTON CONNECTIONS
+--========================================================
 
 Connect(
     SelectEggButton.Activated,
-    function()
-
-        ScanAndRefresh()
-
-        RefreshAutoSelector()
-
-        AutoSelector.Visible =
-            true
-    end
+    OpenAutoSelector
 )
-
 
 Connect(
     SelectorClose.Activated,
-    function()
-
-        AutoSelector.Visible =
-            false
-    end
+    CloseAutoSelector
 )
-
 
 Connect(
     SelectorDone.Activated,
-    function()
-
-        AutoSelector.Visible =
-            false
-    end
+    CloseAutoSelector
 )
-
 
 Connect(
     SelectorSearch:GetPropertyChangedSignal(
         "Text"
     ),
     function()
-
         RefreshAutoSelector()
     end
 )
-
 
 Connect(
     SelectorSelectAll.Activated,
     function()
-
-        SetAllAuto(true)
+        SetAllAutoEggs(true)
     end
 )
-
 
 Connect(
     SelectorClear.Activated,
     function()
-
-        State.AutoSelected = {}
-
-        RefreshAutoSelector()
+        SetAllAutoEggs(false)
     end
 )
-
 
 Connect(
     SelectAllEggsButton.Activated,
     function()
-
-        SetAllAuto(true)
+        SetAllAutoEggs(true)
     end
 )
-
 
 Connect(
     ClearAllEggsButton.Activated,
     function()
-
-        State.AutoSelected = {}
-
-        RefreshAutoSelector()
+        SetAllAutoEggs(false)
     end
 )
 
+Connect(
+    RefreshEggs.Activated,
+    function()
+
+        ScanAndRefresh(true)
+
+        UtilityStatus.Text =
+            "Eggs refreshed"
+    end
+)
+
+Connect(
+    SaveSpawnButton.Activated,
+    function()
+
+        if SaveSpawn() then
+
+            SpawnStatus.Text =
+                "Spawn: Saved"
+
+            UtilityStatus.Text =
+                "Spawn saved"
+        end
+    end
+)
+
+Connect(
+    TakeEggButton.Activated,
+    TakeSelectedEgg
+)
+
+Connect(
+    ReturnSpawnButton.Activated,
+    function()
+        task.spawn(ReturnToSpawn)
+    end
+)
+
+Connect(
+    StopTravelButton.Activated,
+    StopTravel
+)
+
+Connect(
+    ClearTargetTravel.Activated,
+    function()
+
+        State.SelectedEgg = nil
+        State.SelectedObject = nil
+
+        SelectedLabel.Text =
+            "Selected: None"
+
+        DashSelected.Text =
+            "Selected Egg: None"
+    end
+)
+
+Connect(
+    SearchBox:GetPropertyChangedSignal(
+        "Text"
+    ),
+    function()
+        RefreshEggList()
+    end
+)
+
+Connect(
+    SpeedBox.FocusLost,
+    function()
+
+        local value =
+            tonumber(
+                SpeedBox.Text
+            )
+
+        if value then
+
+            State.TravelSpeed =
+                math.clamp(
+                    value,
+                    1,
+                    1000
+                )
+        end
+
+        SpeedBox.Text =
+            tostring(
+                State.TravelSpeed
+            )
+    end
+)
 
 Connect(
     AutoEggButton.Activated,
     function()
 
         if State.AutoEgg then
-
             StopAuto()
-
-        else
-
-            StartAutoEgg()
+            return
         end
+
+        if AutoCount() <= 0 then
+
+            AutoStatus.Text =
+                "Status: Select egg first"
+
+            return
+        end
+
+        StartAutoEgg()
     end
 )
-
 
 Connect(
     AutoInstantButton.Activated,
     function()
 
         if State.AutoInstant then
-
             StopAuto()
-
-        else
-
-            StartAutoInstant()
+            return
         end
+
+        if AutoCount() <= 0 then
+
+            AutoStatus.Text =
+                "Status: Select egg first"
+
+            return
+        end
+
+        StartAutoInstant()
     end
 )
-
 
 Connect(
     AutoStopButton.Activated,
-    function()
-
-        StopAuto()
-        StopTravel()
-    end
+    StopAuto
 )
-
-
-Connect(
-    NoclipButton.Activated,
-    function()
-
-        State.Noclip =
-            not State.Noclip
-
-        NoclipButton.Text =
-            "NOCLIP  •  "
-            .. (
-                State.Noclip
-                and "ON"
-                or "OFF"
-            )
-
-        NoclipButton.BackgroundColor3 =
-            State.Noclip
-            and C.Selected
-            or C.Button
-
-        NoclipButton:SetAttribute(
-            "VensSelected",
-            State.Noclip
-        )
-    end
-)
-
-
---========================================================
--- MOVEMENT
---========================================================
-
-local MovementPage =
-    Pages["Movement"]
-
-PageHeader(
-    MovementPage,
-    "Movement",
-    "Player movement settings"
-)
-
-
-local WalkBox =
-    Input(
-        MovementPage,
-        "WalkSpeed",
-        "16"
-    )
-
-WalkBox.Size =
-    UDim2.fromOffset(150, 30)
-
-WalkBox.Position =
-    UDim2.fromOffset(12, 62)
-
-
-local JumpBox =
-    Input(
-        MovementPage,
-        "JumpPower",
-        "50"
-    )
-
-JumpBox.Size =
-    UDim2.fromOffset(150, 30)
-
-JumpBox.Position =
-    UDim2.fromOffset(174, 62)
-
-
-local FlySpeedBox =
-    Input(
-        MovementPage,
-        "Fly Speed",
-        "60"
-    )
-
-FlySpeedBox.Size =
-    UDim2.fromOffset(150, 30)
-
-FlySpeedBox.Position =
-    UDim2.fromOffset(12, 100)
-
-
-local TravelSpeedBox =
-    Input(
-        MovementPage,
-        "Travel Speed",
-        "100"
-    )
-
-TravelSpeedBox.Size =
-    UDim2.fromOffset(150, 30)
-
-TravelSpeedBox.Position =
-    UDim2.fromOffset(174, 100)
-
-
-local ApplyMovement =
-    Button(
-        MovementPage,
-        "APPLY",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(12, 139)
-    )
-
-
-local FlyButton =
-    Button(
-        MovementPage,
-        "FLY: OFF",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(174, 139)
-    )
-
-
-Label(
-    MovementPage,
-    "Travel automatically takes priority over Fly.",
-    UDim2.new(1, -24, 0, 28),
-    UDim2.fromOffset(12, 185),
-    9,
-    C.Gray
-)
-
 
 Connect(
     ApplyMovement.Activated,
     function()
 
-        State.WalkSpeed =
-            SafeNumber(
-                WalkBox.Text,
-                16,
-                1,
-                500
-            )
+        local walk =
+            tonumber(WalkBox.Text)
 
-        State.JumpPower =
-            SafeNumber(
-                JumpBox.Text,
-                50,
-                1,
-                500
-            )
+        local jump =
+            tonumber(JumpBox.Text)
 
-        State.FlySpeed =
-            SafeNumber(
-                FlySpeedBox.Text,
-                60,
-                1,
-                1000
-            )
+        local flySpeed =
+            tonumber(FlySpeedBox.Text)
 
-        State.TravelSpeed =
-            SafeNumber(
-                TravelSpeedBox.Text,
-                100,
-                1,
-                1000
-            )
+        local travelSpeed =
+            tonumber(TravelSpeedBox.Text)
 
+        if walk then
+            State.WalkSpeed =
+                math.clamp(
+                    walk,
+                    1,
+                    500
+                )
+        end
+
+        if jump then
+            State.JumpPower =
+                math.clamp(
+                    jump,
+                    1,
+                    500
+                )
+        end
+
+        if flySpeed then
+            State.FlySpeed =
+                math.clamp(
+                    flySpeed,
+                    1,
+                    1000
+                )
+        end
+
+        if travelSpeed then
+            State.TravelSpeed =
+                math.clamp(
+                    travelSpeed,
+                    1,
+                    1000
+                )
+        end
 
         if State.Humanoid then
 
@@ -3674,7 +3597,6 @@ Connect(
             State.Humanoid.JumpPower =
                 State.JumpPower
         end
-
 
         WalkBox.Text =
             tostring(
@@ -3695,204 +3617,35 @@ Connect(
             tostring(
                 State.TravelSpeed
             )
-
-
-        AddActivity(
-            "Movement updated",
-            "Walk "
-                .. State.WalkSpeed
-                .. " • Travel "
-                .. State.TravelSpeed,
-            "UTILITY"
-        )
     end
 )
 
+Connect(
+    NoclipButton.Activated,
+    function()
 
---========================================================
--- FLY
---========================================================
+        State.Noclip =
+            not State.Noclip
 
-local FlyConnection
+        NoclipButton.Text =
+            "NOCLIP: "
+            .. (
+                State.Noclip
+                and "ON"
+                or "OFF"
+            )
 
+        NoclipButton.BackgroundColor3 =
+            State.Noclip
+            and C.Selected
+            or C.Button
 
-local function StopFly()
-
-    State.Fly = false
-
-    if FlyConnection then
-
-        pcall(function()
-            FlyConnection:Disconnect()
-        end)
-
-        FlyConnection = nil
-    end
-
-
-    local root =
-        GetRoot()
-
-    if root then
-        root.AssemblyLinearVelocity =
-            Vector3.zero
-    end
-
-
-    FlyButton.Text =
-        "FLY: OFF"
-
-    FlyButton.BackgroundColor3 =
-        C.Button
-
-    FlyButton:SetAttribute(
-        "VensSelected",
-        false
-    )
-end
-
-
-local function StartFly()
-
-    if State.Travel
-        or State.Returning
-        or IsAutoRunning() then
-
-        return
-    end
-
-
-    StopFly()
-
-    State.Fly = true
-
-    FlyButton.Text =
-        "FLY: ON"
-
-    FlyButton.BackgroundColor3 =
-        C.Selected
-
-    FlyButton:SetAttribute(
-        "VensSelected",
-        true
-    )
-
-
-    AddActivity(
-        "Fly enabled",
-        "Fly speed "
-            .. State.FlySpeed,
-        "MOVEMENT"
-    )
-
-
-    FlyConnection =
-        RunService.RenderStepped:Connect(
-            function()
-
-                if not State.Fly
-                    or State.Travel
-                    or State.Returning
-                    or IsAutoRunning() then
-
-                    return
-                end
-
-
-                local root =
-                    GetRoot()
-
-                local camera =
-                    workspace.CurrentCamera
-
-                if not root
-                    or not camera then
-
-                    return
-                end
-
-
-                local move =
-                    Vector3.zero
-
-
-                if UIS:IsKeyDown(
-                    Enum.KeyCode.W
-                ) then
-
-                    move +=
-                        camera.CFrame.LookVector
-                end
-
-
-                if UIS:IsKeyDown(
-                    Enum.KeyCode.S
-                ) then
-
-                    move -=
-                        camera.CFrame.LookVector
-                end
-
-
-                if UIS:IsKeyDown(
-                    Enum.KeyCode.A
-                ) then
-
-                    move -=
-                        camera.CFrame.RightVector
-                end
-
-
-                if UIS:IsKeyDown(
-                    Enum.KeyCode.D
-                ) then
-
-                    move +=
-                        camera.CFrame.RightVector
-                end
-
-
-                if UIS:IsKeyDown(
-                    Enum.KeyCode.Space
-                ) then
-
-                    move +=
-                        Vector3.yAxis
-                end
-
-
-                if UIS:IsKeyDown(
-                    Enum.KeyCode.LeftControl
-                ) then
-
-                    move -=
-                        Vector3.yAxis
-                end
-
-
-                if move.Magnitude > 0 then
-
-                    move =
-                        move.Unit
-                        * math.clamp(
-                            State.FlySpeed,
-                            1,
-                            1000
-                        )
-
-                else
-
-                    move =
-                        Vector3.zero
-                end
-
-
-                root.AssemblyLinearVelocity =
-                    move
-            end
+        NoclipButton:SetAttribute(
+            "VensSelected",
+            State.Noclip
         )
-end
-
+    end
+)
 
 Connect(
     FlyButton.Activated,
@@ -3902,106 +3655,14 @@ Connect(
 
             StopFly()
 
-        else
+        elseif not State.Travel
+            and not State.Returning
+            and not IsAutoRunning() then
 
             StartFly()
         end
     end
 )
-
-
---========================================================
--- NOCLIP
---========================================================
-
-Connect(
-    RunService.Stepped,
-    function()
-
-        if not State.Noclip then
-            return
-        end
-
-        local character =
-            State.Character
-
-        if not character then
-            return
-        end
-
-
-        for _, part in ipairs(
-            character:GetDescendants()
-        ) do
-
-            if part:IsA(
-                "BasePart"
-            ) then
-
-                part.CanCollide =
-                    false
-            end
-        end
-    end
-)
-
-
---========================================================
--- PLAYER PAGE
---========================================================
-
-local PlayerPage =
-    Pages["Player"]
-
-PageHeader(
-    PlayerPage,
-    "Player",
-    "Character information"
-)
-
-
-local PlayerName =
-    Label(
-        PlayerPage,
-        "Player: "
-            .. LocalPlayer.Name,
-        UDim2.new(1, -24, 0, 26),
-        UDim2.fromOffset(12, 64),
-        11,
-        C.White
-    )
-
-
-local CharacterStatus =
-    Label(
-        PlayerPage,
-        "Character: Ready",
-        UDim2.new(1, -24, 0, 26),
-        UDim2.fromOffset(12, 97),
-        11,
-        C.Green
-    )
-
-
-local SpawnStatus =
-    Label(
-        PlayerPage,
-        "Spawn: Saved",
-        UDim2.new(1, -24, 0, 26),
-        UDim2.fromOffset(12, 130),
-        11,
-        C.White
-    )
-
-
-local SavePlayerSpawn =
-    Button(
-        PlayerPage,
-        "SAVE CURRENT SPAWN",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(12, 172)
-    )
-
 
 Connect(
     SavePlayerSpawn.Activated,
@@ -4012,12 +3673,6 @@ Connect(
             SpawnStatus.Text =
                 "Spawn: Saved"
 
-            AddActivity(
-                "Spawn saved",
-                "Current position",
-                "PLAYER"
-            )
-
         else
 
             SpawnStatus.Text =
@@ -4025,210 +3680,6 @@ Connect(
         end
     end
 )
-
-
---========================================================
--- UTILITY
---========================================================
-
-local UtilityPage =
-    Pages["Utility"]
-
-PageHeader(
-    UtilityPage,
-    "Utility",
-    "Additional controls"
-)
-
-
-local UtilityStatus =
-    Label(
-        UtilityPage,
-        "Ready",
-        UDim2.new(1, -24, 0, 20),
-        UDim2.fromOffset(12, 53),
-        10,
-        C.Gray
-    )
-
-
-local ESPButton =
-    Button(
-        UtilityPage,
-        "EGG ESP: OFF",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(12, 80)
-    )
-
-
-local AntiAFKButton =
-    Button(
-        UtilityPage,
-        "ANTI AFK: OFF",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(174, 80)
-    )
-
-
-local RescanButton =
-    Button(
-        UtilityPage,
-        "FORCE RESCAN",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(12, 118)
-    )
-
-
-local ClearTargetButton =
-    Button(
-        UtilityPage,
-        "CLEAR TARGET",
-        UDim2.fromOffset(150, 31),
-        UDim2.fromOffset(174, 118)
-    )
-
-
---========================================================
--- ESP
---========================================================
-
-local ESPObjects = {}
-
-
-local function ClearESP()
-
-    for object, gui in pairs(
-        ESPObjects
-    ) do
-
-        pcall(function()
-            gui:Destroy()
-        end)
-
-        ESPObjects[object] = nil
-    end
-end
-
-
-local function RefreshESP()
-
-    ClearESP()
-
-    if not State.ESP then
-        return
-    end
-
-
-    for _, egg in ipairs(
-        State.Eggs
-    ) do
-
-        local object =
-            egg.Object
-
-        if object
-            and object.Parent then
-
-            local adornee
-
-            if object:IsA(
-                "BasePart"
-            ) then
-
-                adornee = object
-
-            else
-
-                adornee =
-                    object:
-                    FindFirstChildWhichIsA(
-                        "BasePart",
-                        true
-                    )
-            end
-
-
-            if adornee then
-
-                local billboard =
-                    Instance.new(
-                        "BillboardGui"
-                    )
-
-                billboard.Name =
-                    "VensHubEggESP"
-
-                billboard.Adornee =
-                    adornee
-
-                billboard.Size =
-                    UDim2.fromOffset(
-                        135,
-                        34
-                    )
-
-                billboard.StudsOffset =
-                    Vector3.new(
-                        0,
-                        3,
-                        0
-                    )
-
-                billboard.AlwaysOnTop =
-                    true
-
-                billboard.Parent =
-                    ScreenGui
-
-
-                local text =
-                    Instance.new(
-                        "TextLabel"
-                    )
-
-                text.Size =
-                    UDim2.fromScale(
-                        1,
-                        1
-                    )
-
-                text.BackgroundColor3 =
-                    C.Black
-
-                text.BackgroundTransparency =
-                    0.15
-
-                text.TextColor3 =
-                    C.PurpleText
-
-                text.TextStrokeTransparency =
-                    0.4
-
-                text.Font =
-                    Enum.Font.GothamBold
-
-                text.TextSize = 10
-
-                text.Text =
-                    egg.Name
-                    .. "\n"
-                    .. math.floor(
-                        egg.Distance
-                    )
-                    .. " studs"
-
-                text.Parent =
-                    billboard
-
-                Corner(text, 7)
-
-                ESPObjects[object] =
-                    billboard
-            end
-        end
-    end
-end
-
 
 Connect(
     ESPButton.Activated,
@@ -4256,40 +3707,19 @@ Connect(
         )
 
         RefreshESP()
-
-        AddActivity(
-            "Egg ESP",
-            State.ESP
-            and "Enabled"
-            or "Disabled",
-            "UTILITY"
-        )
     end
 )
-
 
 Connect(
     RescanButton.Activated,
     function()
 
-        ScanAndRefresh()
-
-        if State.ESP then
-            RefreshESP()
-        end
+        ScanAndRefresh(true)
 
         UtilityStatus.Text =
             "Rescan complete"
-
-        AddActivity(
-            "Manual rescan",
-            #State.Eggs
-                .. " eggs found",
-            "SCAN"
-        )
     end
 )
-
 
 Connect(
     ClearTargetButton.Activated,
@@ -4306,19 +3736,8 @@ Connect(
 
         UtilityStatus.Text =
             "Target cleared"
-
-        AddActivity(
-            "Target cleared",
-            "Egg target removed",
-            "UTILITY"
-        )
     end
 )
-
-
---========================================================
--- ANTI AFK
---========================================================
 
 Connect(
     AntiAFKButton.Activated,
@@ -4344,17 +3763,8 @@ Connect(
             "VensSelected",
             State.AntiAFK
         )
-
-        AddActivity(
-            "Anti AFK",
-            State.AntiAFK
-            and "Enabled"
-            or "Disabled",
-            "UTILITY"
-        )
     end
 )
-
 
 Connect(
     LocalPlayer.Idled,
@@ -4366,547 +3776,43 @@ Connect(
 
         pcall(function()
 
-            VirtualUser:
-                CaptureController()
+            VirtualUser:CaptureController()
 
-            VirtualUser:
-                ClickButton2(
-                    Vector2.new(0, 0)
-                )
+            VirtualUser:ClickButton2(
+                Vector2.new(0, 0)
+            )
         end)
     end
 )
 
-
---========================================================
--- ACTIVITY PAGE
---========================================================
-
-local ActivityPage =
-    Pages["Activity"]
-
-PageHeader(
-    ActivityPage,
-    "Activity",
-    "Session statistics and saved local activity"
-)
-
-
-local SessionStatus =
-    Label(
-        ActivityPage,
-        "Session active",
-        UDim2.new(1, -24, 0, 18),
-        UDim2.fromOffset(12, 55),
-        10,
-        C.Green
-    )
-
-
-local StatsRow1 =
-    Label(
-        ActivityPage,
-        "Scans: 0    Travel: 0",
-        UDim2.new(1, -24, 0, 18),
-        UDim2.fromOffset(12, 77),
-        9,
-        C.White
-    )
-
-
-local StatsRow2 =
-    Label(
-        ActivityPage,
-        "Auto: 0    Instant: 0",
-        UDim2.new(1, -24, 0, 18),
-        UDim2.fromOffset(12, 98),
-        9,
-        C.White
-    )
-
-
-local StatsRow3 =
-    Label(
-        ActivityPage,
-        "Interactions: 0",
-        UDim2.new(1, -24, 0, 18),
-        UDim2.fromOffset(12, 119),
-        9,
-        C.PurpleText
-    )
-
-
-local ActivityList =
-    Instance.new("ScrollingFrame")
-
-ActivityList.Size =
-    UDim2.new(1, -24, 0, 115)
-
-ActivityList.Position =
-    UDim2.fromOffset(12, 143)
-
-ActivityList.BackgroundColor3 =
-    Color3.fromRGB(9, 8, 13)
-
-ActivityList.BorderSizePixel = 0
-
-ActivityList.ScrollBarThickness = 3
-ActivityList.ScrollBarImageColor3 =
-    C.Purple
-
-ActivityList.CanvasSize =
-    UDim2.new()
-
-ActivityList.AutomaticCanvasSize =
-    Enum.AutomaticSize.Y
-
-ActivityList.ZIndex = 25
-ActivityList.Parent = ActivityPage
-
-Corner(ActivityList, 9)
-
-
-local ActivityLayout =
-    Instance.new("UIListLayout")
-
-ActivityLayout.Padding =
-    UDim.new(0, 4)
-
-ActivityLayout.SortOrder =
-    Enum.SortOrder.LayoutOrder
-
-ActivityLayout.Parent =
-    ActivityList
-
-
-local ClearActivity =
-    Button(
-        ActivityPage,
-        "CLEAR ACTIVITY",
-        UDim2.fromOffset(130, 29),
-        UDim2.fromOffset(12, 263)
-    )
-
-
-local RefreshActivity =
-    Button(
-        ActivityPage,
-        "REFRESH",
-        UDim2.fromOffset(85, 29),
-        UDim2.fromOffset(150, 263)
-    )
-
-
-local function RefreshActivityUI()
-
-    for _, child in ipairs(
-        ActivityList:GetChildren()
-    ) do
-
-        if child:IsA("Frame") then
-            child:Destroy()
-        end
-    end
-
-
-    for index = #State.Activity, 1, -1 do
-
-        local item =
-            State.Activity[index]
-
-        if type(item) ==
-            "table" then
-
-            local row =
-                Instance.new("Frame")
-
-            row.Size =
-                UDim2.new(
-                    1,
-                    -8,
-                    0,
-                    40
-                )
-
-            row.BackgroundColor3 =
-                C.Panel2
-
-            row.BorderSizePixel = 0
-
-            row.LayoutOrder =
-                #State.Activity
-                - index
-
-            row.Parent =
-                ActivityList
-
-            Corner(row, 7)
-
-
-            local title =
-                Label(
-                    row,
-                    "[" ..
-                        tostring(
-                            item.time
-                            or "--:--:--"
-                        )
-                        .. "] "
-                        .. tostring(
-                            item.title
-                        ),
-                    UDim2.new(
-                        1,
-                        -14,
-                        0,
-                        18
-                    ),
-                    UDim2.fromOffset(
-                        7,
-                        3
-                    ),
-                    9,
-                    C.PurpleText
-                )
-
-            title.Font =
-                Enum.Font.GothamBold
-
-
-            local detail =
-                Label(
-                    row,
-                    tostring(
-                        item.detail
-                        or ""
-                    ),
-                    UDim2.new(
-                        1,
-                        -14,
-                        0,
-                        16
-                    ),
-                    UDim2.fromOffset(
-                        7,
-                        20
-                    ),
-                    8,
-                    C.Gray
-                )
-
-            detail.TextTruncate =
-                Enum.TextTruncate.AtEnd
-        end
-    end
-
-
-    DashActivity.Text =
-        "Activity: "
-        .. #State.Activity
-end
-
-
 Connect(
-    ClearActivity.Activated,
+    RunService.Stepped,
     function()
 
-        State.Activity = {}
-
-        SaveActivity()
-
-        RefreshActivityUI()
-
-        AddActivity(
-            "Activity cleared",
-            "New activity log started",
-            "SYSTEM"
-        )
-    end
-)
-
-
-Connect(
-    RefreshActivity.Activated,
-    function()
-
-        RefreshActivityUI()
-
-        UtilityStatus.Text =
-            "Activity refreshed"
-    end
-)
-
-
---========================================================
--- UPDATE PAGE
---========================================================
-
-local UpdatePage =
-    Pages["Update"]
-
-PageHeader(
-    UpdatePage,
-    "Update",
-    "VensHub • Ride a Pet"
-)
-
-
-local UpdateBox =
-    Instance.new("Frame")
-
-UpdateBox.Size =
-    UDim2.new(1, -24, 0, 210)
-
-UpdateBox.Position =
-    UDim2.fromOffset(12, 58)
-
-UpdateBox.BackgroundColor3 =
-    C.Panel2
-
-UpdateBox.BackgroundTransparency =
-    0.04
-
-UpdateBox.BorderSizePixel = 0
-
-UpdateBox.ZIndex = 23
-UpdateBox.Parent = UpdatePage
-
-Corner(UpdateBox, 9)
-
-Stroke(
-    UpdateBox,
-    Color3.fromRGB(45, 38, 58),
-    1,
-    0.25
-)
-
-
-local UpdateText =
-    Label(
-        UpdateBox,
-        "VensHub V1\n\n"
-        .. "• Egg Scanner > 500 studs\n"
-        .. "• Egg Travel\n"
-        .. "• Auto Egg\n"
-        .. "• Auto Instant\n"
-        .. "• Select Egg\n"
-        .. "• Egg ESP\n"
-        .. "• Fly\n"
-        .. "• Noclip\n"
-        .. "• Anti AFK\n"
-        .. "• Session Activity\n"
-        .. "• Local Activity Save\n"
-        .. "• Mobile + PC UI",
-        UDim2.new(
-            1,
-            -18,
-            1,
-            -12
-        ),
-        UDim2.fromOffset(9, 7),
-        10,
-        C.White
-    )
-
-UpdateText.TextYAlignment =
-    Enum.TextYAlignment.Top
-
-
---========================================================
--- TRAVEL BUTTON CONNECTIONS
---========================================================
-
-Connect(
-    RefreshEggs.Activated,
-    function()
-
-        ScanAndRefresh()
-
-        if State.ESP then
-            RefreshESP()
+        if not State.Noclip then
+            return
         end
 
-        AddActivity(
-            "Egg list refreshed",
-            #State.Eggs
-                .. " eggs",
-            "SCAN"
-        )
-    end
-)
+        local character =
+            State.Character
 
+        if not character then
+            return
+        end
 
-Connect(
-    SearchBox:GetPropertyChangedSignal(
-        "Text"
-    ),
-    function()
+        for _, part in ipairs(
+            character:GetChildren()
+        ) do
 
-        RefreshEggList()
-    end
-)
-
-
-Connect(
-    SpeedBox.FocusLost,
-    function()
-
-        State.TravelSpeed =
-            SafeNumber(
-                SpeedBox.Text,
-                100,
-                1,
-                1000
-            )
-
-        SpeedBox.Text =
-            tostring(
-                State.TravelSpeed
-            )
-    end
-)
-
-
-Connect(
-    SaveSpawnButton.Activated,
-    function()
-
-        if SaveSpawn() then
-
-            SpawnStatus.Text =
-                "Spawn: Saved"
-
-            AddActivity(
-                "Spawn saved",
-                "Travel return point updated",
-                "PLAYER"
-            )
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
         end
     end
 )
 
-
-Connect(
-    TakeEggButton.Activated,
-    TakeSelectedEgg
-)
-
-
-Connect(
-    ReturnSpawnButton.Activated,
-    function()
-
-        task.spawn(
-            ReturnToSpawn
-        )
-    end
-)
-
-
-Connect(
-    StopTravelButton.Activated,
-    StopTravel
-)
-
-
-Connect(
-    ClearTargetTravel.Activated,
-    function()
-
-        State.SelectedEgg = nil
-        State.SelectedObject = nil
-
-        SelectedLabel.Text =
-            "Selected: None"
-
-        DashSelected.Text =
-            "Selected Egg: None"
-
-        AddActivity(
-            "Target cleared",
-            "Travel target removed",
-            "TRAVEL"
-        )
-    end
-)
-
-
 --========================================================
--- MOVEMENT CONNECTION
---========================================================
-
-Connect(
-    ApplyMovement.Activated,
-    function()
-
-        State.WalkSpeed =
-            SafeNumber(
-                WalkBox.Text,
-                16,
-                1,
-                500
-            )
-
-        State.JumpPower =
-            SafeNumber(
-                JumpBox.Text,
-                50,
-                1,
-                500
-            )
-
-        State.FlySpeed =
-            SafeNumber(
-                FlySpeedBox.Text,
-                60,
-                1,
-                1000
-            )
-
-        State.TravelSpeed =
-            SafeNumber(
-                TravelSpeedBox.Text,
-                100,
-                1,
-                1000
-            )
-
-
-        if State.Humanoid then
-
-            State.Humanoid.WalkSpeed =
-                State.WalkSpeed
-
-            State.Humanoid.JumpPower =
-                State.JumpPower
-        end
-
-
-        WalkBox.Text =
-            tostring(
-                State.WalkSpeed
-            )
-
-        JumpBox.Text =
-            tostring(
-                State.JumpPower
-            )
-
-        FlySpeedBox.Text =
-            tostring(
-                State.FlySpeed
-            )
-
-        TravelSpeedBox.Text =
-            tostring(
-                State.TravelSpeed
-            )
-    end
-)
-
-
---========================================================
--- RESPAWN
+-- CHARACTER RESET FIX
 --========================================================
 
 Connect(
@@ -4917,10 +3823,13 @@ Connect(
         StopTravel()
         StopFly()
 
-        State.SelectedEgg = nil
         State.SelectedObject = nil
+        State.SelectedEgg = nil
 
         State.Eggs = {}
+        State.EggMap = {}
+
+        State.LastScanSignature = ""
 
         State.Character =
             character
@@ -4937,7 +3846,6 @@ Connect(
                 8
             )
 
-
         if State.Humanoid then
 
             State.Humanoid.WalkSpeed =
@@ -4947,15 +3855,13 @@ Connect(
                 State.JumpPower
         end
 
-
         CharacterStatus.Text =
             "Character: Ready"
 
         CharacterStatus.TextColor3 =
             C.Green
 
-
-        task.wait(0.4)
+        task.wait(0.25)
 
         SaveSpawn()
 
@@ -4964,40 +3870,136 @@ Connect(
 
         DashStatus.Text =
             "●  Status: Ready"
-
-
-        AddActivity(
-            "Character respawned",
-            "Systems reset safely",
-            "SYSTEM"
-        )
     end
 )
 
+--========================================================
+-- SCANNER LOOP
+--========================================================
+
+task.spawn(function()
+
+    task.wait(0.25)
+
+    pcall(function()
+        ScanAndRefresh(true)
+    end)
+
+    pcall(function()
+        RefreshAutoSelector()
+    end)
+
+    while ScreenGui
+        and ScreenGui.Parent do
+
+        task.wait(SCAN_INTERVAL)
+
+        if GetRoot() then
+
+            pcall(function()
+                ScanAndRefresh(false)
+            end)
+        end
+    end
+end)
 
 --========================================================
--- HIDE / REOPEN
+-- DASHBOARD LOOP
 --========================================================
 
-local Reopen =
-    Instance.new("ImageButton")
+task.spawn(function()
 
-Reopen.Name =
-    "VensHubReopen"
+    while ScreenGui
+        and ScreenGui.Parent do
 
-Reopen.Size =
-    UDim2.fromOffset(62, 62)
+        task.wait(UI_UPDATE_INTERVAL)
+
+        if DashEggs
+            and DashEggs.Parent then
+
+            DashEggs.Text =
+                "Scanned Eggs: "
+                .. #State.Eggs
+        end
+
+        if DashSelected
+            and DashSelected.Parent then
+
+            if State.SelectedEgg then
+
+                DashSelected.Text =
+                    "Selected Egg: "
+                    .. State.SelectedEgg
+
+            else
+
+                DashSelected.Text =
+                    "Selected Egg: None"
+            end
+        end
+
+        if DashTravel
+            and DashTravel.Parent then
+
+            if State.Travel then
+
+                if State.Returning then
+
+                    DashTravel.Text =
+                        "Travel: Returning"
+
+                else
+
+                    DashTravel.Text =
+                        "Travel: Travelling"
+                end
+
+            elseif DashTravel.Text ~= "Travel: At Spawn"
+                and DashTravel.Text ~= "Travel: Stopped"
+                and DashTravel.Text ~= "Travel: Egg Not Found"
+                and DashTravel.Text ~= "Travel: Select an egg" then
+
+                DashTravel.Text =
+                    "Travel: Idle"
+            end
+        end
+
+        if DashAuto
+            and DashAuto.Parent then
+
+            if State.AutoEgg then
+
+                DashAuto.Text =
+                    "Auto: Egg"
+
+            elseif State.AutoInstant then
+
+                DashAuto.Text =
+                    "Auto: Instant"
+
+            else
+
+                DashAuto.Text =
+                    "Auto: OFF"
+            end
+        end
+    end
+end)
+
+--========================================================
+-- REOPEN BUTTON
+--========================================================
+
+local Reopen = Instance.new("ImageButton")
+
+Reopen.Name = "VensHubReopen"
+Reopen.Size = UDim2.fromOffset(62, 62)
 
 Reopen.AnchorPoint =
     Vector2.new(0.5, 0.5)
 
 Reopen.Position =
-    UDim2.new(
-        0.5,
-        0,
-        0.5,
-        0
-    )
+    UDim2.new(0.5, 0, 0.5, 0)
 
 Reopen.BackgroundColor3 =
     C.Panel
@@ -5014,23 +4016,14 @@ Reopen.ImageTransparency =
 Reopen.AutoButtonColor =
     false
 
-Reopen.Visible =
-    false
-
+Reopen.Active = true
+Reopen.Visible = false
 Reopen.ZIndex = 100
 
-Reopen.Parent =
-    ScreenGui
+Reopen.Parent = ScreenGui
 
 Corner(Reopen, 16)
-
-Stroke(
-    Reopen,
-    C.Purple,
-    2,
-    0
-)
-
+Stroke(Reopen, C.Purple, 2, 0)
 
 local ReopenOverlay =
     Instance.new("Frame")
@@ -5044,13 +4037,16 @@ ReopenOverlay.BackgroundColor3 =
 ReopenOverlay.BackgroundTransparency =
     0.28
 
-ReopenOverlay.BorderSizePixel = 0
+ReopenOverlay.BorderSizePixel =
+    0
 
-ReopenOverlay.ZIndex = 101
-ReopenOverlay.Parent = Reopen
+ReopenOverlay.ZIndex =
+    101
+
+ReopenOverlay.Parent =
+    Reopen
 
 Corner(ReopenOverlay, 16)
-
 
 local ReopenText =
     Label(
@@ -5070,11 +4066,11 @@ ReopenText.Font =
 
 ReopenText.ZIndex = 102
 
+MakeDraggable(Reopen)
 
-MakeDraggable(
-    Reopen
-)
-
+--========================================================
+-- HIDE / REOPEN FIX
+--========================================================
 
 Connect(
     HideButton.Activated,
@@ -5087,7 +4083,6 @@ Connect(
     end
 )
 
-
 Connect(
     Reopen.Activated,
     function()
@@ -5096,236 +4091,79 @@ Connect(
 
         Main.Visible = true
         Reopen.Visible = false
+
+        ShowPage(CurrentPage)
     end
 )
 
-
 --========================================================
--- NOCLIP RESPAWN SAFETY
---========================================================
-
-Connect(
-    RunService.Stepped,
-    function()
-
-        if not State.Noclip then
-            return
-        end
-
-        local character =
-            State.Character
-
-        if not character then
-            return
-        end
-
-        for _, part in ipairs(
-            character:GetDescendants()
-        ) do
-
-            if part:IsA(
-                "BasePart"
-            ) then
-
-                part.CanCollide =
-                    false
-            end
-        end
-    end
-)
-
-
---========================================================
--- SCANNER LOOP
+-- FINAL MAIN GUI FIX
 --========================================================
 
-task.spawn(function()
+Main.Visible = true
+Content.Visible = true
+Sidebar.Visible = true
 
-    task.wait(1)
-
-    ScanAndRefresh()
-    RefreshAutoSelector()
-    RefreshActivityUI()
-
-
-    while ScreenGui.Parent do
-
-        task.wait(
-            SCAN_INTERVAL
-        )
-
-        if GetRoot() then
-
-            ScanAndRefresh()
-
-            if State.ESP then
-                RefreshESP()
-            end
-
-            if AutoSelector.Visible then
-                RefreshAutoSelector()
-            end
-        end
-    end
-end)
-
-
---========================================================
--- DASHBOARD LOOP
---========================================================
-
-task.spawn(function()
-
-    while ScreenGui.Parent do
-
-        task.wait(0.5)
-
-
-        DashEggs.Text =
-            "Scanned Eggs: "
-            .. #State.Eggs
-
-
-        if State.SelectedEgg then
-
-            DashSelected.Text =
-                "Selected Egg: "
-                .. State.SelectedEgg
-
-        else
-
-            DashSelected.Text =
-                "Selected Egg: None"
-        end
-
-
-        if State.Travel then
-
-            if State.Returning then
-
-                DashTravel.Text =
-                    "Travel: Returning"
-
-            else
-
-                DashTravel.Text =
-                    "Travel: Travelling"
-            end
-
-        elseif not State.Travel then
-
-            if DashTravel.Text ==
-                "Travel: Travelling"
-                or DashTravel.Text ==
-                "Travel: Returning" then
-
-                DashTravel.Text =
-                    "Travel: Idle"
-            end
-        end
-
-
-        if State.AutoEgg then
-
-            DashAuto.Text =
-                "Auto: Egg"
-
-        elseif State.AutoInstant then
-
-            DashAuto.Text =
-                "Auto: Instant"
-
-        else
-
-            DashAuto.Text =
-                "Auto: OFF"
-        end
-
-
-        DashActivity.Text =
-            "Activity: "
-            .. #State.Activity
-
-
-        local elapsed =
-            os.time()
-            - State.SessionStart
-
-        local minutes =
-            math.floor(
-                elapsed / 60
-            )
-
-        SessionStatus.Text =
-            "Session: "
-            .. tostring(minutes)
-            .. "m • "
-            .. tostring(
-                State.LastStatus
-            )
-    end
-end)
-
-
---========================================================
--- ACTIVITY LOOP
---========================================================
-
-task.spawn(function()
-
-    while ScreenGui.Parent do
-
-        task.wait(1)
-
-        StatsRow1.Text =
-            "Scans: "
-            .. State.ScanCount
-            .. "    Travel: "
-            .. State.TravelCount
-
-        StatsRow2.Text =
-            "Auto: "
-            .. State.AutoCount
-            .. "    Instant: "
-            .. State.InstantCount
-
-        StatsRow3.Text =
-            "Interactions: "
-            .. State.InteractionCount
-    end
-end)
-
-
---========================================================
--- INITIALIZE
---========================================================
-
-RefreshEggList()
-RefreshAutoSelector()
-RefreshActivityUI()
+State.GUIHidden = false
 
 ShowPage("Dashboard")
 
+task.defer(function()
 
-AddActivity(
-    "VensHub started",
-    "Ride a Pet session initialized",
-    "SYSTEM"
-)
+    if not ScreenGui
+        or not ScreenGui.Parent then
+        return
+    end
 
+    Main.Visible = true
+    Content.Visible = true
+    Sidebar.Visible = true
+
+    ShowPage("Dashboard")
+
+    pcall(function()
+        ScanAndRefresh(true)
+    end)
+
+    pcall(function()
+        RefreshAutoSelector()
+    end)
+end)
 
 --========================================================
--- FINAL
+-- GUI SAFETY
 --========================================================
 
-print(
-    "[VensHub] Ride a Pet FULL loaded."
-)
+task.spawn(function()
 
-print(
-    "[VensHub] UI: 555x375"
-)
+    while ScreenGui
+        and ScreenGui.Parent do
 
-print(
-    "[VensHub] Activity system enabled."
-)
+        task.wait(0.5)
+
+        if not State.GUIHidden then
+
+            if Main
+                and Main.Parent then
+
+                Main.Visible = true
+            end
+
+            if Content
+                and Content.Parent then
+
+                Content.Visible = true
+            end
+
+            if Sidebar
+                and Sidebar.Parent then
+
+                Sidebar.Visible = true
+            end
+        end
+    end
+end)
+
+--========================================================
+-- END
+--========================================================
