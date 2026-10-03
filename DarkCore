@@ -111,7 +111,7 @@ local GAME_NAME = "Ride a Pet"
 local HUB_IMAGE = "rbxthumb://type=Asset&id=15083264347&w=420&h=420"
 local HUB_ASSET_ID = "15083264347"
 local BACKGROUND_IMAGE = "rbxthumb://type=Asset&id=18956824095&w=1024&h=1024" -- TRUE DRAGONS: ALL background artwork
-local WHATSAPP = "https://whatsapp.com/channel/0029VbDzPEKBFLgPAeNzCB0b"
+local WHATSAPP = "https://whatsapp.com/channel/0029VbDT4K38KMqsD84Gdu1R"
 
 local MIN_SCAN_DISTANCE = 500
 local SCAN_INTERVAL = 1.5
@@ -600,7 +600,7 @@ Corner(LoadingAdmin,7)
 
 local LoadingBarBG = Instance.new("Frame")
 LoadingBarBG.Size = UDim2.new(1,-44,0,7)
-LoadingBarBG.Position = UDim2.fromOffset(22,242)
+LoadingBarBG.Position = UDim2.fromOffset(22,254)
 LoadingBarBG.BackgroundColor3 = Color3.fromRGB(35,35,35)
 LoadingBarBG.BorderSizePixel = 0
 LoadingBarBG.ZIndex = 504
@@ -618,17 +618,56 @@ Corner(LoadingBar,7)
 
 local LoadingPercent = Label(LoadingCard,"0%",UDim2.fromOffset(38,17),UDim2.new(1,-60,0,255),8,C.White)
 LoadingPercent.TextXAlignment = Enum.TextXAlignment.Right
+LoadingPercent.Position = UDim2.new(1,-60,0,267)
 LoadingPercent.ZIndex = 505
 
 local LoadingStatus = Label(LoadingCard,"Loading Interface...",UDim2.new(1,-24,0,17),UDim2.fromOffset(12,286),8,C.Gray)
 LoadingStatus.TextXAlignment = Enum.TextXAlignment.Center
 LoadingStatus.ZIndex = 505
 
+local LoadingWhatsApp = Label(LoadingCard,"WHATSAPP CHANNEL",UDim2.new(1,-24,0,14),UDim2.fromOffset(12,319),7,C.Gray)
+LoadingWhatsApp.TextXAlignment = Enum.TextXAlignment.Center
+LoadingWhatsApp.Font = Enum.Font.GothamBold
+LoadingWhatsApp.ZIndex = 505
+
+local LoadingWhatsAppButton = Instance.new("TextButton")
+LoadingWhatsAppButton.Name = "WhatsAppChannelButton"
+LoadingWhatsAppButton.Size = UDim2.new(1,-44,0,24)
+LoadingWhatsAppButton.Position = UDim2.fromOffset(22,208)
+LoadingWhatsAppButton.BackgroundColor3 = Color3.fromRGB(18,18,18)
+LoadingWhatsAppButton.BackgroundTransparency = 0
+LoadingWhatsAppButton.BorderSizePixel = 0
+LoadingWhatsAppButton.Text = "JOIN WHATSAPP"
+LoadingWhatsAppButton.TextColor3 = C.White
+LoadingWhatsAppButton.TextSize = 8
+LoadingWhatsAppButton.Font = Enum.Font.GothamBold
+LoadingWhatsAppButton.AutoButtonColor = false
+LoadingWhatsAppButton.ZIndex = 505
+LoadingWhatsAppButton.Parent = LoadingCard
+Corner(LoadingWhatsAppButton,7)
+Stroke(LoadingWhatsAppButton,C.White,1,0.35)
+
+Connect(LoadingWhatsAppButton.Activated,function()
+    pcall(function()
+        if setclipboard then
+            setclipboard(WHATSAPP)
+        elseif toclipboard then
+            toclipboard(WHATSAPP)
+        end
+    end)
+    LoadingWhatsAppButton.Text = "LINK COPIED"
+    task.delay(1.2,function()
+        if LoadingWhatsAppButton and LoadingWhatsAppButton.Parent then
+            LoadingWhatsAppButton.Text = "JOIN WHATSAPP"
+        end
+    end)
+end)
+
 -- Small monochrome divider for a cleaner loading card
 local LoadingDivider = Instance.new("Frame")
 LoadingDivider.Size = UDim2.new(0,46,0,1)
 LoadingDivider.AnchorPoint = Vector2.new(0.5,0)
-LoadingDivider.Position = UDim2.new(0.5,0,0,310)
+LoadingDivider.Position = UDim2.new(0.5,0,0,236)
 LoadingDivider.BackgroundColor3 = Color3.fromRGB(80,80,80)
 LoadingDivider.BackgroundTransparency = 0.25
 LoadingDivider.BorderSizePixel = 0
