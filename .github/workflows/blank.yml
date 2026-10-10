@@ -12,43 +12,45 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build VEdit Pro APK
     runs-on: ubuntu-24.04
+
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check and extract ZIP
+      - name: Extract VEdit Pro ZIP
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP="VEditPro-Android-v4-audit-fixed.zip"
+          ZIP="$GITHUB_WORKSPACE/VEditPro-Android-v4-audit-fixed.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: ZIP tidak dijumpai di root repository."
-            find . -maxdepth 3 -type f
+            echo "ERROR: Fail ZIP tidak dijumpai."
+            ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
 
-          mkdir -p extracted
-          unzip -oq "$ZIP" -d extracted
+          mkdir -p "$GITHUB_WORKSPACE/extracted"
+          unzip -oq "$ZIP" -d "$GITHUB_WORKSPACE/extracted"
 
-          SETTINGS=$(find extracted \
-            -name settings.gradle.kts \
-            -print -quit)
+          SETTINGS=$(find "$GITHUB_WORKSPACE/extracted" \
+            -name settings.gradle.kts -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts tidak dijumpai."
-            find extracted -maxdepth 5 -type f
+            echo "ERROR: settings.gradle.kts tiada dalam ZIP."
             exit 1
           fi
 
-          PROJECT_DIR="$(dirname "$SETTINGS")"
+          PROJECT_DIR=$(dirname "$SETTINGS")
 
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app/build.gradle.kts tidak dijumpai."
+            echo "ERROR: app/build.gradle.kts tiada."
             exit 1
           fi
 
@@ -61,20 +63,39 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Find Android SDK tools
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls -la "$ANDROID_HOME"
+
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
+            -type f -name sdkmanager -print -quit 2>/dev/null || true)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager tidak ditemui dalam Android SDK."
+            find "$ANDROID_HOME" -maxdepth 5 -type f \
+              -name sdkmanager -print
+            exit 1
+          fi
+
+          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          echo "$(dirname "$ANDROID_HOME/platform-tools/adb")" >> "$GITHUB_PATH"
 
       - name: Install Android SDK components
         shell: bash
         run: |
           set -euo pipefail
 
-          sdkmanager --install \
+          yes | "$SDKMANAGER" --licenses || true
+
+          "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
-
-          yes | sdkmanager --licenses || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -88,7 +109,7 @@ jobs:
           cd "$PROJECT_DIR"
           gradle assembleDebug --stacktrace
 
-      - name: Locate APK
+      - name: Find generated APK
         shell: bash
         run: |
           set -euo pipefail
@@ -99,16 +120,14 @@ jobs:
             -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: APK tidak dijumpai selepas build."
+            echo "ERROR: APK tidak dijumpai."
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
           cp "$APK" "$GITHUB_WORKSPACE/apk-output/VEditPro-debug.apk"
 
-          echo "APK berjaya dihasilkan."
-
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VEditPro-debug-apk
