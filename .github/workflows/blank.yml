@@ -15,10 +15,6 @@ jobs:
     name: Build VEdit Pro APK
     runs-on: ubuntu-24.04
 
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,7 +27,7 @@ jobs:
           ZIP="$GITHUB_WORKSPACE/VEditPro-Android-v4-audit-fixed.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Fail ZIP tidak dijumpai."
+            echo "ERROR: ZIP tidak dijumpai."
             ls -la "$GITHUB_WORKSPACE"
             exit 1
           fi
@@ -43,14 +39,14 @@ jobs:
             -name settings.gradle.kts -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts tiada dalam ZIP."
+            echo "ERROR: settings.gradle.kts tidak dijumpai dalam ZIP."
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
+          PROJECT_DIR="$(dirname "$SETTINGS")"
 
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app/build.gradle.kts tiada."
+            echo "ERROR: app/build.gradle.kts tidak dijumpai."
             exit 1
           fi
 
@@ -63,39 +59,23 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Find Android SDK tools
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          ls -la "$ANDROID_HOME"
-
-          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
-            -type f -name sdkmanager -print -quit 2>/dev/null || true)
-
-          if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager tidak ditemui dalam Android SDK."
-            find "$ANDROID_HOME" -maxdepth 5 -type f \
-              -name sdkmanager -print
-            exit 1
-          fi
-
-          echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
-          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-          echo "$(dirname "$ANDROID_HOME/platform-tools/adb")" >> "$GITHUB_PATH"
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 'latest'
+          accept-android-sdk-licenses: true
 
       - name: Install Android SDK components
         shell: bash
         run: |
           set -euo pipefail
 
-          yes | "$SDKMANAGER" --licenses || true
-
-          "$SDKMANAGER" --install \
+          sdkmanager --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
+
+          yes | sdkmanager --licenses || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -109,7 +89,7 @@ jobs:
           cd "$PROJECT_DIR"
           gradle assembleDebug --stacktrace
 
-      - name: Find generated APK
+      - name: Find and prepare APK
         shell: bash
         run: |
           set -euo pipefail
