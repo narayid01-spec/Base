@@ -13,7 +13,7 @@ permissions:
 jobs:
   build:
     name: Build Android APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -32,28 +32,28 @@ jobs:
             exit 1
           fi
 
-          mkdir -p project
-          unzip -oq "$ZIP" -d project
+          mkdir -p extracted
+          unzip -oq "$ZIP" -d extracted
 
-          SETTINGS=$(find project \
+          SETTINGS=$(find extracted \
             -name settings.gradle.kts \
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts tiada dalam ZIP."
-            find project -maxdepth 4 -type f
+            echo "ERROR: settings.gradle.kts tidak dijumpai."
+            find extracted -maxdepth 5 -type f
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$SETTINGS")
+          PROJECT_DIR="$(dirname "$SETTINGS")"
 
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: Fail konfigurasi app tidak dijumpai."
+            echo "ERROR: app/build.gradle.kts tidak dijumpai."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Projek ditemui di: $PROJECT_DIR"
+          echo "Projek ditemui: $PROJECT_DIR"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -64,11 +64,16 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 35
+      - name: Install Android SDK components
         shell: bash
         run: |
-          sdkmanager "platforms;android-35" \
-                     "build-tools;35.0.0"
+          set -euo pipefail
+
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
           yes | sdkmanager --licenses || true
 
       - name: Set up Gradle
@@ -79,14 +84,34 @@ jobs:
       - name: Build debug APK
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           cd "$PROJECT_DIR"
           gradle assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Locate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK=$(find "$PROJECT_DIR" \
+            -type f \
+            -path '*/build/outputs/apk/debug/*.apk' \
+            -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK tidak dijumpai selepas build."
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/VEditPro-debug.apk"
+
+          echo "APK berjaya dihasilkan."
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: VEditPro-debug-apk
-          path: project/**/app/build/outputs/apk/debug/app-debug.apk
+          path: apk-output/VEditPro-debug.apk
           if-no-files-found: error
           retention-days: 7
