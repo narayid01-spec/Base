@@ -1,3 +1,4 @@
+
 name: VEdit Pro APK Build
 
 on:
@@ -13,10 +14,6 @@ jobs:
   build:
     name: Build VEdit Pro APK
     runs-on: ubuntu-24.04
-
-    env:
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout repository
@@ -43,8 +40,6 @@ jobs:
 
           if [ -z "$SETTINGS" ]; then
             echo "ERROR: settings.gradle.kts tidak dijumpai."
-            find "$GITHUB_WORKSPACE/extracted" \
-              -maxdepth 5 -type f
             exit 1
           fi
 
@@ -69,22 +64,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          SDK_ROOT=""
+          SDK_ROOT="/usr/local/lib/android/sdk"
 
-          for CANDIDATE in \
-            "${ANDROID_HOME:-}" \
-            "${ANDROID_SDK_ROOT:-}" \
-            "/usr/local/lib/android/sdk" \
-            "$HOME/Android/Sdk"
-          do
-            if [ -n "$CANDIDATE" ] && [ -d "$CANDIDATE" ]; then
-              SDK_ROOT="$CANDIDATE"
-              break
-            fi
-          done
-
-          if [ -z "$SDK_ROOT" ]; then
-            echo "ERROR: Android SDK tidak ditemui."
+          if [ ! -d "$SDK_ROOT" ]; then
+            echo "ERROR: Android SDK tidak ditemui di $SDK_ROOT"
             exit 1
           fi
 
@@ -92,8 +75,9 @@ jobs:
             -type f -name sdkmanager -print -quit 2>/dev/null || true)
 
           if [ -z "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager tidak ditemui."
-            find "$SDK_ROOT" -maxdepth 5 -type f -print
+            echo "ERROR: sdkmanager tidak dijumpai."
+            find "$SDK_ROOT" -maxdepth 5 -type f \
+              -name sdkmanager -print
             exit 1
           fi
 
@@ -101,26 +85,42 @@ jobs:
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
           echo "SDKMANAGER=$SDKMANAGER" >> "$GITHUB_ENV"
 
-          echo "Android SDK: $SDK_ROOT"
+          echo "Android SDK ditemui."
           "$SDKMANAGER" --version
+
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Menerima lesen Android SDK..."
+
+          set +o pipefail
+          yes | "$SDKMANAGER" --licenses
+          LICENSE_STATUS=$?
+          set -o pipefail
+
+          if [ "$LICENSE_STATUS" -ne 0 ]; then
+            echo "ERROR: Lesen Android SDK gagal diterima."
+            exit 1
+          fi
+
+          echo "Proses penerimaan lesen selesai."
 
       - name: Install Android SDK components
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "Accepting Android SDK licences"
-          yes | "$SDKMANAGER" --licenses
-
-          echo "Installing Android SDK components"
           "$SDKMANAGER" --install \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-          echo "Checking installed platform"
           test -d "$ANDROID_HOME/platforms/android-35"
           test -d "$ANDROID_HOME/build-tools/35.0.0"
+
+          echo "Komponen Android SDK sedia."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -135,7 +135,7 @@ jobs:
           cd "$PROJECT_DIR"
           gradle assembleDebug --stacktrace
 
-      - name: Locate APK
+      - name: Find generated APK
         shell: bash
         run: |
           set -euo pipefail
