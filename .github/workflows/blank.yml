@@ -27,7 +27,7 @@ jobs:
           ZIP="$GITHUB_WORKSPACE/VEditPro-Android-v4-audit-fixed.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: ZIP not found in repository root."
+            echo "ERROR: ZIP tidak dijumpai di root repository."
             exit 1
           fi
 
@@ -38,14 +38,14 @@ jobs:
             -name settings.gradle.kts -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts not found."
+            echo "ERROR: settings.gradle.kts tidak dijumpai."
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS")"
 
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app/build.gradle.kts not found."
+            echo "ERROR: app/build.gradle.kts tidak dijumpai."
             exit 1
           fi
 
@@ -59,9 +59,8 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
-          # SDK licenses are accepted by this action by default.
 
-      - name: Install required SDK packages
+      - name: Install Android SDK components
         shell: bash
         run: |
           set -euo pipefail
@@ -73,22 +72,98 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
+      - name: Fix known Kotlin references in build copy
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FILE="$PROJECT_DIR/app/src/main/java/com/veditpro/app/MainActivity.kt"
+
+          if [ ! -f "$FILE" ]; then
+            echo "ERROR: MainActivity.kt tidak dijumpai."
+            find "$PROJECT_DIR/app/src/main" -name '*.kt'
+            exit 1
+          fi
+
+          python3 - "$FILE" <<'PY'
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+
+          # Film is not available in the current Material icon setup.
+          source = source.replace(
+              "import androidx.compose.material.icons.filled.Film",
+              "import androidx.compose.material.icons.filled.VideoLibrary"
+          )
+          source = source.replace("Icons.Default.Film", "Icons.Default.VideoLibrary")
+          source = source.replace("Icons.Filled.Film", "Icons.Filled.VideoLibrary")
+
+          # Effects belongs to androidx.media3.common, not transformer.
+          source = source.replace(
+              "import androidx.media3.transformer.Effects",
+              "import androidx.media3.common.Effects"
+          )
+
+          # Remove a duplicate VideoLibrary import if the source already had one.
+          lines = source.splitlines()
+          result = []
+          seen = set()
+
+          for line in lines:
+              if line.strip() == "import androidx.compose.material.icons.filled.VideoLibrary":
+                  if line.strip() in seen:
+                      continue
+                  seen.add(line.strip())
+              result.append(line)
+
+          path.write_text("\n".join(result) + "\n")
+
+          print("Applied known import and icon fixes to build copy.")
+          PY
+
+          echo "Verifying corrected references..."
+          grep -n "import androidx.media3.common.Effects" "$FILE"
+          if grep -n "Icons.Default.Film\|Icons.Filled.Film" "$FILE"; then
+            echo "ERROR: Film reference remains."
+            exit 1
+          fi
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
+      - name: Build debug APK
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
           gradle assembleDebug --stacktrace
 
+      - name: Locate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK=$(find "$PROJECT_DIR" \
+            -type f \
+            -path '*/build/outputs/apk/debug/*.apk' \
+            -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK tidak dijumpai selepas build."
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          cp "$APK" "$GITHUB_WORKSPACE/apk-output/VEditPro-debug.apk"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VEditPro-debug-apk
-          path: extracted/**/app/build/outputs/apk/debug/*.apk
+          path: apk-output/VEditPro-debug.apk
           if-no-files-found: error
           retention-days: 7
