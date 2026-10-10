@@ -1,5 +1,5 @@
 
-name: Build VEdit Pro v1.1 - Audited
+name: VEdit Pro APK Build
 
 on:
   workflow_dispatch:
@@ -12,32 +12,44 @@ permissions:
 
 jobs:
   build:
-    name: Compile VEdit Pro APK
+    name: Build VEdit Pro APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract audited project
+      - name: Extract VEdit Pro project
+        shell: bash
         run: |
-          if [ ! -f settings.gradle.kts ]; then
-            if [ -f VEditPro-Android-v4-audit-fixed.zip ]; then
-              unzip -o VEditPro-Android-v4-audit-fixed.zip -d extracted
-              cp -R extracted/. .
-            elif [ -f VEditPro-Android-v2.zip ]; then
-              unzip -o VEditPro-Android-v2.zip -d extracted
-              cp -R extracted/. .
-            else
-              echo "ERROR: Project ZIP not found."
-              exit 1
-            fi
-          fi
+          set -euo pipefail
 
-          if [ ! -f app/build.gradle.kts ]; then
-            echo "ERROR: Android app module not found."
+          ZIP="VEditPro-Android-v4-audit-fixed.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: $ZIP tidak dijumpai di root repository."
+            echo "Pastikan fail ZIP telah dimuat naik ke halaman utama repository."
             exit 1
           fi
+
+          mkdir -p extracted
+          unzip -oq "$ZIP" -d extracted
+
+          SETTINGS="$(find extracted -name settings.gradle.kts -print -quit)"
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: settings.gradle.kts tidak dijumpai dalam ZIP."
+            exit 1
+          fi
+
+          PROJECT_ROOT="$(dirname "$SETTINGS")"
+
+          cp -R "$PROJECT_ROOT"/. .
+
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
+
+          echo "Project berjaya diekstrak."
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -50,18 +62,13 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Compile debug APK
-        run: gradle assembleDebug
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
 
-      - name: Verify APK exists
-        run: |
-          test -s app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload VEdit Pro APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VEditPro-v1.1-audited-APK
+          name: VEditPro-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
