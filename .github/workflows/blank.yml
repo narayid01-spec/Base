@@ -12,14 +12,14 @@ permissions:
 
 jobs:
   build:
-    name: Build VEdit Pro APK
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract VEdit Pro project
+      - name: Check and extract ZIP
         shell: bash
         run: |
           set -euo pipefail
@@ -27,29 +27,33 @@ jobs:
           ZIP="VEditPro-Android-v4-audit-fixed.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: $ZIP tidak dijumpai di root repository."
-            echo "Pastikan fail ZIP telah dimuat naik ke halaman utama repository."
+            echo "ERROR: ZIP tidak dijumpai di root repository."
+            find . -maxdepth 3 -type f
             exit 1
           fi
 
-          mkdir -p extracted
-          unzip -oq "$ZIP" -d extracted
+          mkdir -p project
+          unzip -oq "$ZIP" -d project
 
-          SETTINGS="$(find extracted -name settings.gradle.kts -print -quit)"
+          SETTINGS=$(find project \
+            -name settings.gradle.kts \
+            -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts tidak dijumpai dalam ZIP."
+            echo "ERROR: settings.gradle.kts tiada dalam ZIP."
+            find project -maxdepth 4 -type f
             exit 1
           fi
 
-          PROJECT_ROOT="$(dirname "$SETTINGS")"
+          PROJECT_DIR=$(dirname "$SETTINGS")
 
-          cp -R "$PROJECT_ROOT"/. .
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: Fail konfigurasi app tidak dijumpai."
+            exit 1
+          fi
 
-          test -f settings.gradle.kts
-          test -f app/build.gradle.kts
-
-          echo "Project berjaya diekstrak."
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Projek ditemui di: $PROJECT_DIR"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -57,18 +61,32 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          sdkmanager "platforms;android-35" \
+                     "build-tools;35.0.0"
+          yes | sdkmanager --licenses || true
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          cd "$PROJECT_DIR"
+          gradle assembleDebug --stacktrace
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: VEditPro-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: project/**/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
