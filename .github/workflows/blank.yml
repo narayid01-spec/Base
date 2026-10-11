@@ -24,13 +24,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          ZIP="$GITHUB_WORKSPACE/VEdit Pro.zip"
+          ZIP="$GITHUB_WORKSPACE/VEdit%20Pro.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: VEdit Pro.zip tidak dijumpai."
-            echo "Muat naik ZIP baharu ke root repository."
-            echo "Fail yang tersedia:"
-            find "$GITHUB_WORKSPACE" -maxdepth 2 -type f
+            echo "ERROR: VEdit%20Pro.zip tidak dijumpai."
+            echo "Fail ZIP yang tersedia:"
+            find "$GITHUB_WORKSPACE" -maxdepth 2 -type f -iname '*.zip'
             exit 1
           fi
 
@@ -41,19 +40,19 @@ jobs:
             -name settings.gradle.kts -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts tiada dalam ZIP baharu."
+            echo "ERROR: settings.gradle.kts tidak dijumpai dalam ZIP baharu."
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS")"
 
           if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app/build.gradle.kts tiada."
+            echo "ERROR: app/build.gradle.kts tidak dijumpai."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Menggunakan projek baharu: $PROJECT_DIR"
+          echo "ZIP baharu berjaya diekstrak."
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -81,14 +80,14 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build VEdit Pro APK
+      - name: Build new VEdit Pro APK
         shell: bash
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
           gradle assembleDebug --stacktrace
 
-      - name: Verify APK
+      - name: Find APK
         shell: bash
         run: |
           set -euo pipefail
@@ -99,14 +98,12 @@ jobs:
             -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ERROR: Build selesai tetapi APK tidak ditemui."
+            echo "ERROR: APK tidak dijumpai selepas build."
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
           cp "$APK" "$GITHUB_WORKSPACE/apk-output/VEditPro-debug.apk"
-
-          echo "APK berjaya dihasilkan: VEditPro-debug.apk"
 
       - name: Upload VEdit Pro APK
         uses: actions/upload-artifact@v4
