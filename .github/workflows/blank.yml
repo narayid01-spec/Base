@@ -4,35 +4,44 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: ["main", "master"]
+    branches:
+      - main
+      - master
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.3
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show Godot version
-        run: godot --version
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v2
+        with:
+          version: 4.3.0
+          use-dotnet: false
 
-      - name: Import project resources
-        run: godot --headless --editor --path . --quit
-
-      - name: Export debug APK
+      - name: Check project files
         run: |
+          test -f project.godot
+          test -f export_presets.cfg
           mkdir -p build
+
+      - name: Import project
+        run: |
+          godot --headless --editor --path . --quit
+
+      - name: Export Android APK
+        run: |
           godot --headless --path . \
             --export-debug "Android" \
             build/MegaPropertyTycoon3D.apk
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: MegaPropertyTycoon3D-Android-APK
+          name: MegaPropertyTycoon3D-APK
           path: build/MegaPropertyTycoon3D.apk
           if-no-files-found: error
           retention-days: 14
