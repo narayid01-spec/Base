@@ -24,14 +24,12 @@ jobs:
         run: |
           set -e
           mkdir -p "$RUNNER_TEMP/zena-unpack"
-
           count=0
+
           while IFS= read -r -d '' archive; do
             count=$((count + 1))
             dest="$RUNNER_TEMP/zena-unpack/source_$count"
             mkdir -p "$dest"
-            echo "Extracting source archive $count"
-
             unzip -oq "$archive" -d "$dest"
           done < <(
             find "$GITHUB_WORKSPACE" \
@@ -39,7 +37,7 @@ jobs:
               -not -path '*/.git/*' -print0
           )
 
-      - name: Locate Flutter Source
+      - name: Locate Flutter Project
         id: locate
         shell: bash
         run: |
@@ -49,7 +47,6 @@ jobs:
           for root in \
             "$RUNNER_TEMP/zena-unpack" \
             "$GITHUB_WORKSPACE"; do
-
             [ -d "$root" ] || continue
 
             PROJECT_FILE=$(find "$root" \
@@ -77,22 +74,17 @@ jobs:
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Flutter source found."
 
-      - name: Copy to Clean Build Path
-        shell: bash
+      - name: Copy Flutter Source
         env:
           SOURCE_DIR: ${{ steps.locate.outputs.project_dir }}
+        shell: bash
         run: |
           set -e
           BUILD_DIR="$RUNNER_TEMP/zena_build"
-
           mkdir -p "$BUILD_DIR"
           cp -a "$SOURCE_DIR/." "$BUILD_DIR/"
-
-          rm -rf "$BUILD_DIR/.dart_tool"
-          rm -rf "$BUILD_DIR/build"
-
+          rm -rf "$BUILD_DIR/.dart_tool" "$BUILD_DIR/build"
           echo "ZENA_BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
 
       - name: Set Up Java
@@ -107,12 +99,27 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show Tool Versions
+      - name: Install Android SDK
+        shell: bash
         run: |
-          flutter --version
-          java -version
+          set -e
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 
-      - name: Prepare Android Configuration
+          SDKMANAGER=$(find "$SDK/cmdline-tools" \
+            -type f -path '*/bin/sdkmanager' -print -quit)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager tidak ditemui."
+            exit 1
+          fi
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Prepare Android Project
         working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
@@ -126,23 +133,102 @@ jobs:
               --project-name zena_bug .
           fi
 
-          test -f pubspec.yaml
-          test -f lib/main.dart
-
-      - name: Resolve Dependencies
+      - name: Clean and Resolve Dependencies
         working-directory: ${{ env.ZENA_BUILD_DIR }}
-        run: flutter pub get
+        run: |
+          flutter clean
+          flutter pub get
 
-      - name: Show Native Asset Dependencies
+      - name: Fix Android Compile SDK
         working-directory: ${{ env.ZENA_BUILD_DIR }}
-        run: flutter pub deps
+        shell: bash
+        run: |
+          set -e
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          roots = [
+              Path("android"),
+              Path.home() / ".pub-cache" / "hosted" / "pub.dev",
+          ]
+
+          patterns = [
+              (r'\bcompileSdkVersion\s+flutter\.compileSdkVersion',
+               'compileSdkVersion 36'),
+              (r'\bcompileSdkVersion\s+\d+',
+               'compileSdkVersion 36'),
+              (r'\bcompileSdk\s*=\s*flutter\.compileSdkVersion',
+               'compileSdk = 36'),
+              (r'\bcompileSdk\s*=\s*\d+',
+               'compileSdk = 36'),
+              (r'\bcompileSdk\s+flutter\.compileSdkVersion',
+               'compileSdk 36'),
+              (r'\bcompileSdk\s+\d+',
+               'compileSdk 36'),
+          ]
+
+          changed = []
+
+          for root in roots:
+              if not root.exists():
+                  continue
+
+              for path in root.rglob("build.gradle*"):
+                  if "build" in path.parts:
+                      continue
+
+                  try:
+                      original = path.read_text()
+                  except (OSError, UnicodeError):
+                      continue
+
+                  updated = original
+                  for pattern, replacement in patterns:
+                      updated = re.sub(pattern, replacement, updated)
+
+                  if updated != original:
+                      path.write_text(updated)
+                      changed.append(str(path))
+
+          print("Gradle files updated to compileSdk 36:")
+          for path in changed:
+              print(" -", path)
+
+          if not changed:
+              sys.exit(
+                  "No compileSdk declarations were updated. "
+                  "Inspect the Gradle files before building."
+              )
+          PY
+
+      - name: Verify Compile SDK
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
+        shell: bash
+        run: |
+          echo "App Gradle configuration:"
+          grep -nE 'compileSdk|compileSdkVersion' \
+            android/app/build.gradle \
+            android/app/build.gradle.kts 2>/dev/null || true
+
+          echo "Checking for remaining compileSdk 34 declarations:"
+          if grep -R -nE \
+            'compileSdkVersion[[:space:]]+34|compileSdk[[:space:]]*=[[:space:]]*34' \
+            "$HOME/.pub-cache/hosted/pub.dev" \
+            --include='build.gradle' \
+            --include='build.gradle.kts'; then
+            echo "::error::Some plugin modules still use compileSdk 34."
+            exit 1
+          fi
 
       - name: Analyze Dart
         working-directory: ${{ env.ZENA_BUILD_DIR }}
         run: flutter analyze
         continue-on-error: true
 
-      - name: Run Flutter Tests
+      - name: Run Tests
         working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
@@ -164,12 +250,7 @@ jobs:
         run: |
           set -e
           APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          if [ ! -s "$APK" ]; then
-            echo "::error::APK tidak dijana."
-            exit 1
-          fi
-
+          test -s "$APK"
           cp "$APK" "$GITHUB_WORKSPACE/Zena Bug.apk"
           ls -lh "$GITHUB_WORKSPACE/Zena Bug.apk"
 
