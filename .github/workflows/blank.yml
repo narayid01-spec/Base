@@ -24,14 +24,12 @@ jobs:
         run: |
           set -e
           mkdir -p "$RUNNER_TEMP/zena-unpack"
-
           count=0
+
           while IFS= read -r -d '' archive; do
             count=$((count + 1))
             dest="$RUNNER_TEMP/zena-unpack/source_$count"
             mkdir -p "$dest"
-            echo "Extracting source archive $count"
-
             unzip -oq "$archive" -d "$dest"
           done < <(
             find "$GITHUB_WORKSPACE" \
@@ -39,7 +37,7 @@ jobs:
               -not -path '*/.git/*' -print0
           )
 
-      - name: Locate Flutter Source
+      - name: Locate Flutter Project
         id: locate
         shell: bash
         run: |
@@ -49,7 +47,6 @@ jobs:
           for root in \
             "$RUNNER_TEMP/zena-unpack" \
             "$GITHUB_WORKSPACE"; do
-
             [ -d "$root" ] || continue
 
             PROJECT_FILE=$(find "$root" \
@@ -65,7 +62,7 @@ jobs:
           done
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "::error::Projek Flutter tidak ditemui."
+            echo "::error::pubspec.yaml tidak ditemui."
             exit 1
           fi
 
@@ -77,23 +74,17 @@ jobs:
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Flutter source found."
 
-      - name: Copy to Clean Build Path
-        shell: bash
+      - name: Copy Source
         env:
           SOURCE_DIR: ${{ steps.locate.outputs.project_dir }}
         run: |
           set -e
-          BUILD_DIR="$RUNNER_TEMP/zena_build"
-
-          mkdir -p "$BUILD_DIR"
-          cp -a "$SOURCE_DIR/." "$BUILD_DIR/"
-
-          rm -rf "$BUILD_DIR/.dart_tool"
-          rm -rf "$BUILD_DIR/build"
-
-          echo "ZENA_BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/zena-build"
+          cp -a "$SOURCE_DIR/." "$RUNNER_TEMP/zena-build/"
+          rm -rf "$RUNNER_TEMP/zena-build/.dart_tool"
+          rm -rf "$RUNNER_TEMP/zena-build/build"
+          echo "ZENA_BUILD_DIR=$RUNNER_TEMP/zena-build" >> "$GITHUB_ENV"
 
       - name: Set Up Java
         uses: actions/setup-java@v4
@@ -107,12 +98,15 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Show Tool Versions
-        run: |
-          flutter --version
-          java -version
+      - name: Set Up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Prepare Android Configuration
+      - name: Install Android API 36
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          yes | sdkmanager --licenses
+
+      - name: Prepare Android Project
         working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
@@ -129,13 +123,58 @@ jobs:
           test -f pubspec.yaml
           test -f lib/main.dart
 
-      - name: Resolve Dependencies
+      - name: Set Android Compile SDK 36
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          files = [
+              Path("android/app/build.gradle"),
+              Path("android/app/build.gradle.kts"),
+          ]
+
+          target = next((p for p in files if p.is_file()), None)
+
+          if target is None:
+              sys.exit("Android app Gradle file not found.")
+
+          source = target.read_text()
+
+          patterns = [
+              r'compileSdkVersion\s*(?:=\s*)?\d+',
+              r'compileSdkVersion\s+flutter\.compileSdkVersion',
+              r'compileSdk\s*=\s*\d+',
+              r'compileSdk\s+flutter\.compileSdkVersion',
+          ]
+
+          updated = source
+          for pattern in patterns:
+              updated = re.sub(pattern, 'compileSdk = 36', updated)
+
+          if updated == source:
+              print("Could not find a known compileSdk declaration.")
+              print("Gradle file:", target)
+              print(source)
+              sys.exit(1)
+
+          target.write_text(updated)
+          print("Updated compileSdk to 36 in", target)
+          PY
+
+          grep -n 'compileSdk' android/app/build.gradle \
+            android/app/build.gradle.kts 2>/dev/null || true
+
+      - name: Clean Project
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
+        run: flutter clean
+
+      - name: Get Dependencies
         working-directory: ${{ env.ZENA_BUILD_DIR }}
         run: flutter pub get
-
-      - name: Show Native Asset Dependencies
-        working-directory: ${{ env.ZENA_BUILD_DIR }}
-        run: flutter pub deps
 
       - name: Analyze Dart
         working-directory: ${{ env.ZENA_BUILD_DIR }}
@@ -160,16 +199,10 @@ jobs:
 
       - name: Verify APK
         working-directory: ${{ env.ZENA_BUILD_DIR }}
-        shell: bash
         run: |
           set -e
           APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          if [ ! -s "$APK" ]; then
-            echo "::error::APK tidak dijana."
-            exit 1
-          fi
-
+          test -s "$APK"
           cp "$APK" "$GITHUB_WORKSPACE/Zena Bug.apk"
           ls -lh "$GITHUB_WORKSPACE/Zena Bug.apk"
 
