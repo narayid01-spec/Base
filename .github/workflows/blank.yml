@@ -19,23 +19,56 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Extract ZIP Archives
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/zena-source"
+
+          while IFS= read -r -d '' archive; do
+            echo "Extracting: $archive"
+            target="$RUNNER_TEMP/zena-source/$(basename "$archive" .zip)"
+            mkdir -p "$target"
+            unzip -oq "$archive" -d "$target" || {
+              echo "::warning::Could not extract $archive"
+            }
+          done < <(
+            find "$GITHUB_WORKSPACE" \
+              -type f -name '*.zip' \
+              -not -path '*/.git/*' \
+              -print0
+          )
+
       - name: Locate Flutter Project
         id: locate
         shell: bash
         run: |
-          PROJECT_FILE=$(find "$GITHUB_WORKSPACE" \
-            -type f -name pubspec.yaml \
-            -not -path '*/.git/*' \
-            -not -path '*/.dart_tool/*' \
-            -not -path '*/build/*' \
-            -print -quit)
+          PROJECT_FILE=""
+
+          for root in \
+            "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/zena-source"; do
+
+            [ -d "$root" ] || continue
+
+            PROJECT_FILE=$(find "$root" \
+              -type f -name pubspec.yaml \
+              -not -path '*/.git/*' \
+              -not -path '*/.dart_tool/*' \
+              -not -path '*/build/*' \
+              -print -quit)
+
+            if [ -n "$PROJECT_FILE" ]; then
+              break
+            fi
+          done
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "::error::pubspec.yaml tidak ditemui."
+            echo "::error::Projek sumber Flutter tidak ditemui."
+            echo "ZIP mesti mengandungi pubspec.yaml, lib/main.dart dan sumber aplikasi."
             exit 1
           fi
 
-          PROJECT_DIR=$(dirname "$PROJECT_FILE")
+          PROJECT_DIR="$(dirname "$PROJECT_FILE")"
 
           if [ ! -f "$PROJECT_DIR/lib/main.dart" ]; then
             echo "::error::lib/main.dart tidak ditemui."
@@ -43,7 +76,7 @@ jobs:
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Project: $PROJECT_DIR"
+          echo "Found project: $PROJECT_DIR"
 
       - name: Set Up Java
         uses: actions/setup-java@v4
@@ -57,18 +90,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Check Flutter
-        run: flutter --version
-
-      - name: Clean Generated Files
-        working-directory: ${{ steps.locate.outputs.project_dir }}
-        shell: bash
-        run: |
-          flutter clean
-          rm -rf .dart_tool build
-          rm -f .flutter-plugins-dependencies
-
-      - name: Prepare Android
+      - name: Prepare Android Project
         working-directory: ${{ steps.locate.outputs.project_dir }}
         shell: bash
         run: |
@@ -76,7 +98,11 @@ jobs:
             flutter create --platforms=android --project-name zena_bug .
           fi
 
-      - name: Resolve Dependencies
+      - name: Clean Project
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: flutter clean
+
+      - name: Get Dependencies
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: flutter pub get
 
@@ -85,15 +111,15 @@ jobs:
         run: flutter analyze
         continue-on-error: true
 
-      - name: Run Flutter Tests
+      - name: Run Tests
         working-directory: ${{ steps.locate.outputs.project_dir }}
         shell: bash
         run: |
           if [ -d test ] && \
-             find test -type f -name '*_test.dart' -print -quit | grep -q .; then
+            find test -type f -name '*_test.dart' -print -quit | grep -q .; then
             flutter test
           else
-            echo "Tiada fail ujian; langkah ini dilangkau."
+            echo "No Dart tests found; skipping."
           fi
         continue-on-error: true
 
@@ -101,21 +127,21 @@ jobs:
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: flutter build apk --release
 
-      - name: Verify APK
+      - name: Verify and Rename APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
         shell: bash
         run: |
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
           if [ ! -s "$APK" ]; then
-            echo "::error::APK tidak dijana atau fail kosong."
+            echo "::error::APK tidak berjaya dijana."
             exit 1
           fi
 
           cp "$APK" "$GITHUB_WORKSPACE/Zena Bug.apk"
           ls -lh "$GITHUB_WORKSPACE/Zena Bug.apk"
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Zena Bug
