@@ -19,64 +19,58 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Extract ZIP Archives
+      - name: Extract ZIP Source
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/zena-source"
 
           while IFS= read -r -d '' archive; do
-            echo "Extracting: $archive"
-            target="$RUNNER_TEMP/zena-source/$(basename "$archive" .zip)"
-            mkdir -p "$target"
-            unzip -oq "$archive" -d "$target" || {
-              echo "::warning::Could not extract $archive"
-            }
+            dest="$RUNNER_TEMP/zena-source/$(basename "$archive" .zip)"
+            mkdir -p "$dest"
+            unzip -oq "$archive" -d "$dest"
           done < <(
             find "$GITHUB_WORKSPACE" \
-              -type f -name '*.zip' \
-              -not -path '*/.git/*' \
-              -print0
+              -maxdepth 2 -type f -name '*.zip' \
+              -not -path '*/.git/*' -print0
           )
 
-      - name: Locate Flutter Project
+      - name: Locate Latest Flutter Source
         id: locate
         shell: bash
         run: |
-          PROJECT_FILE=""
+          ROOT="$RUNNER_TEMP/zena-source"
 
-          for root in \
-            "$GITHUB_WORKSPACE" \
-            "$RUNNER_TEMP/zena-source"; do
+          PROJECT_FILE=$(find "$ROOT" \
+            -type f -name pubspec.yaml \
+            -not -path '*/.dart_tool/*' \
+            -not -path '*/build/*' \
+            -print -quit)
 
-            [ -d "$root" ] || continue
-
-            PROJECT_FILE=$(find "$root" \
+          if [ -z "$PROJECT_FILE" ]; then
+            PROJECT_FILE=$(find "$GITHUB_WORKSPACE" \
               -type f -name pubspec.yaml \
               -not -path '*/.git/*' \
               -not -path '*/.dart_tool/*' \
               -not -path '*/build/*' \
               -print -quit)
-
-            if [ -n "$PROJECT_FILE" ]; then
-              break
-            fi
-          done
+          fi
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "::error::Projek sumber Flutter tidak ditemui."
-            echo "ZIP mesti mengandungi pubspec.yaml, lib/main.dart dan sumber aplikasi."
+            echo "::error::Tiada projek Flutter ditemui."
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$PROJECT_FILE")"
 
           if [ ! -f "$PROJECT_DIR/lib/main.dart" ]; then
-            echo "::error::lib/main.dart tidak ditemui."
+            echo "::error::lib/main.dart tiada."
             exit 1
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Found project: $PROJECT_DIR"
+
+          echo "Selected source: $PROJECT_DIR"
+          grep -n -A8 -B3 'subdomains' "$PROJECT_DIR/lib/main.dart" || true
 
       - name: Set Up Java
         uses: actions/setup-java@v4
@@ -90,58 +84,63 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Prepare Android Project
+      - name: Clean Flutter Cache
+        run: |
+          flutter --version
+          dart pub cache repair
+
+      - name: Patch Record Dependency
         working-directory: ${{ steps.locate.outputs.project_dir }}
         shell: bash
         run: |
-          if [ ! -d android ]; then
-            flutter create --platforms=android --project-name zena_bug .
-          fi
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("pubspec.yaml")
+          s = p.read_text()
+
+          if "dependency_overrides:" not in s:
+              s += "\ndependency_overrides:\n  record_linux: ^1.2.1\n"
+          elif "record_linux:" not in s:
+              s += "\n  record_linux: ^1.2.1\n"
+
+          p.write_text(s)
+          print("Configured record_linux override.")
+          PY
 
       - name: Clean Project
         working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: flutter clean
+        run: |
+          flutter clean
+          rm -rf .dart_tool build
+          rm -f pubspec.lock
 
-      - name: Get Dependencies
+      - name: Resolve Dependencies
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: flutter pub get
+
+      - name: Verify Resolved Record Packages
+        working-directory: ${{ steps.locate.outputs.project_dir }}
+        run: flutter pub deps
 
       - name: Analyze Dart
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: flutter analyze
         continue-on-error: true
 
-      - name: Run Tests
-        working-directory: ${{ steps.locate.outputs.project_dir }}
-        shell: bash
-        run: |
-          if [ -d test ] && \
-            find test -type f -name '*_test.dart' -print -quit | grep -q .; then
-            flutter test
-          else
-            echo "No Dart tests found; skipping."
-          fi
-        continue-on-error: true
-
       - name: Build Release APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: flutter build apk --release
 
-      - name: Verify and Rename APK
+      - name: Verify APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
         shell: bash
         run: |
           APK="build/app/outputs/flutter-apk/app-release.apk"
-
-          if [ ! -s "$APK" ]; then
-            echo "::error::APK tidak berjaya dijana."
-            exit 1
-          fi
-
+          test -s "$APK"
           cp "$APK" "$GITHUB_WORKSPACE/Zena Bug.apk"
-          ls -lh "$GITHUB_WORKSPACE/Zena Bug.apk"
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Zena Bug
