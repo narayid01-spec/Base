@@ -62,7 +62,7 @@ jobs:
           done
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "::error::pubspec.yaml tidak ditemui."
+            echo "::error::Projek Flutter tidak ditemui."
             exit 1
           fi
 
@@ -75,16 +75,17 @@ jobs:
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
 
-      - name: Copy Source
+      - name: Copy Flutter Source
         env:
           SOURCE_DIR: ${{ steps.locate.outputs.project_dir }}
+        shell: bash
         run: |
           set -e
-          mkdir -p "$RUNNER_TEMP/zena-build"
-          cp -a "$SOURCE_DIR/." "$RUNNER_TEMP/zena-build/"
-          rm -rf "$RUNNER_TEMP/zena-build/.dart_tool"
-          rm -rf "$RUNNER_TEMP/zena-build/build"
-          echo "ZENA_BUILD_DIR=$RUNNER_TEMP/zena-build" >> "$GITHUB_ENV"
+          BUILD_DIR="$RUNNER_TEMP/zena_build"
+          mkdir -p "$BUILD_DIR"
+          cp -a "$SOURCE_DIR/." "$BUILD_DIR/"
+          rm -rf "$BUILD_DIR/.dart_tool" "$BUILD_DIR/build"
+          echo "ZENA_BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
 
       - name: Set Up Java
         uses: actions/setup-java@v4
@@ -98,13 +99,35 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Set Up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android API 36
+      - name: Install Android SDK Packages
+        shell: bash
         run: |
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
-          yes | sdkmanager --licenses
+          set -e
+
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+
+          if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
+            echo "::error::Android SDK tidak ditemui pada runner."
+            exit 1
+          fi
+
+          SDKMANAGER=$(find "$SDK/cmdline-tools" \
+            -type f -name sdkmanager \
+            -path '*/bin/sdkmanager' -print -quit)
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager tidak ditemui."
+            exit 1
+          fi
+
+          echo "Using SDK manager: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
 
       - name: Prepare Android Project
         working-directory: ${{ env.ZENA_BUILD_DIR }}
@@ -123,7 +146,7 @@ jobs:
           test -f pubspec.yaml
           test -f lib/main.dart
 
-      - name: Set Android Compile SDK 36
+      - name: Set Compile SDK 36
         working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
@@ -132,41 +155,37 @@ jobs:
           import re
           import sys
 
-          files = [
+          candidates = [
               Path("android/app/build.gradle"),
               Path("android/app/build.gradle.kts"),
           ]
+          gradle = next((p for p in candidates if p.is_file()), None)
 
-          target = next((p for p in files if p.is_file()), None)
-
-          if target is None:
+          if gradle is None:
               sys.exit("Android app Gradle file not found.")
 
-          source = target.read_text()
-
+          source = gradle.read_text()
           patterns = [
-              r'compileSdkVersion\s*(?:=\s*)?\d+',
-              r'compileSdkVersion\s+flutter\.compileSdkVersion',
-              r'compileSdk\s*=\s*\d+',
-              r'compileSdk\s+flutter\.compileSdkVersion',
+              r'\bcompileSdkVersion\s+flutter\.compileSdkVersion',
+              r'\bcompileSdkVersion\s+\d+',
+              r'\bcompileSdk\s*=\s*flutter\.compileSdkVersion',
+              r'\bcompileSdk\s*=\s*\d+',
+              r'\bcompileSdk\s+flutter\.compileSdkVersion',
+              r'\bcompileSdk\s+\d+',
           ]
 
           updated = source
           for pattern in patterns:
-              updated = re.sub(pattern, 'compileSdk = 36', updated)
+              updated, count = re.subn(pattern, 'compileSdk = 36', updated)
+              if count:
+                  break
 
           if updated == source:
-              print("Could not find a known compileSdk declaration.")
-              print("Gradle file:", target)
-              print(source)
-              sys.exit(1)
+              sys.exit("Could not update compileSdk automatically.")
 
-          target.write_text(updated)
-          print("Updated compileSdk to 36 in", target)
+          gradle.write_text(updated)
+          print(f"Updated {gradle} to compileSdk 36")
           PY
-
-          grep -n 'compileSdk' android/app/build.gradle \
-            android/app/build.gradle.kts 2>/dev/null || true
 
       - name: Clean Project
         working-directory: ${{ env.ZENA_BUILD_DIR }}
@@ -199,6 +218,7 @@ jobs:
 
       - name: Verify APK
         working-directory: ${{ env.ZENA_BUILD_DIR }}
+        shell: bash
         run: |
           set -e
           APK="build/app/outputs/flutter-apk/app-release.apk"
