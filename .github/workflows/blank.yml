@@ -19,29 +19,35 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Extract ZIP Source
+      - name: Extract Source ZIP
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/zena-source"
+          set -e
+          mkdir -p "$RUNNER_TEMP/zena-unpack"
 
+          count=0
           while IFS= read -r -d '' archive; do
-            dest="$RUNNER_TEMP/zena-source/$(basename "$archive" .zip)"
+            count=$((count + 1))
+            dest="$RUNNER_TEMP/zena-unpack/source_$count"
             mkdir -p "$dest"
+            echo "Extracting source archive $count"
+
             unzip -oq "$archive" -d "$dest"
           done < <(
             find "$GITHUB_WORKSPACE" \
-              -maxdepth 2 -type f -name '*.zip' \
+              -maxdepth 2 -type f -iname '*.zip' \
               -not -path '*/.git/*' -print0
           )
 
-      - name: Locate Flutter Project
+      - name: Locate Flutter Source
         id: locate
         shell: bash
         run: |
+          set -e
           PROJECT_FILE=""
 
           for root in \
-            "$RUNNER_TEMP/zena-source" \
+            "$RUNNER_TEMP/zena-unpack" \
             "$GITHUB_WORKSPACE"; do
 
             [ -d "$root" ] || continue
@@ -59,7 +65,7 @@ jobs:
           done
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "::error::pubspec.yaml tidak ditemui."
+            echo "::error::Projek Flutter tidak ditemui."
             exit 1
           fi
 
@@ -71,7 +77,23 @@ jobs:
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Project: $PROJECT_DIR"
+          echo "Flutter source found."
+
+      - name: Copy to Clean Build Path
+        shell: bash
+        env:
+          SOURCE_DIR: ${{ steps.locate.outputs.project_dir }}
+        run: |
+          set -e
+          BUILD_DIR="$RUNNER_TEMP/zena_build"
+
+          mkdir -p "$BUILD_DIR"
+          cp -a "$SOURCE_DIR/." "$BUILD_DIR/"
+
+          rm -rf "$BUILD_DIR/.dart_tool"
+          rm -rf "$BUILD_DIR/build"
+
+          echo "ZENA_BUILD_DIR=$BUILD_DIR" >> "$GITHUB_ENV"
 
       - name: Set Up Java
         uses: actions/setup-java@v4
@@ -85,44 +107,43 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Repair Android Configuration
-        working-directory: ${{ steps.locate.outputs.project_dir }}
+      - name: Show Tool Versions
+        run: |
+          flutter --version
+          java -version
+
+      - name: Prepare Android Configuration
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
+          set -e
+
           if [ ! -f android/app/build.gradle ] && \
              [ ! -f android/app/build.gradle.kts ]; then
-
-            echo "Android Gradle configuration is incomplete."
-            echo "Generating fresh Flutter Android scaffolding."
-
             rm -rf android
-
             flutter create \
               --platforms=android \
               --project-name zena_bug .
           fi
 
-          if [ ! -f android/app/build.gradle ] && \
-             [ ! -f android/app/build.gradle.kts ]; then
-            echo "::error::Android Gradle files could not be generated."
-            exit 1
-          fi
-
-      - name: Clean Flutter Project
-        working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: flutter clean
+          test -f pubspec.yaml
+          test -f lib/main.dart
 
       - name: Resolve Dependencies
-        working-directory: ${{ steps.locate.outputs.project_dir }}
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
         run: flutter pub get
 
+      - name: Show Native Asset Dependencies
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
+        run: flutter pub deps
+
       - name: Analyze Dart
-        working-directory: ${{ steps.locate.outputs.project_dir }}
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
         run: flutter analyze
         continue-on-error: true
 
       - name: Run Flutter Tests
-        working-directory: ${{ steps.locate.outputs.project_dir }}
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
           if [ -d test ] && \
@@ -134,24 +155,25 @@ jobs:
         continue-on-error: true
 
       - name: Build Release APK
-        working-directory: ${{ steps.locate.outputs.project_dir }}
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
         run: flutter build apk --release
 
-      - name: Verify and Rename APK
-        working-directory: ${{ steps.locate.outputs.project_dir }}
+      - name: Verify APK
+        working-directory: ${{ env.ZENA_BUILD_DIR }}
         shell: bash
         run: |
+          set -e
           APK="build/app/outputs/flutter-apk/app-release.apk"
 
           if [ ! -s "$APK" ]; then
-            echo "::error::APK was not generated."
+            echo "::error::APK tidak dijana."
             exit 1
           fi
 
           cp "$APK" "$GITHUB_WORKSPACE/Zena Bug.apk"
           ls -lh "$GITHUB_WORKSPACE/Zena Bug.apk"
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Zena Bug
