@@ -12,40 +12,64 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Zena Bug APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Extract Uploaded ZIP Files
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/zena_extract"
+
+          while IFS= read -r -d '' file; do
+            echo "Checking archive: $file"
+            destination="$RUNNER_TEMP/zena_extract/$(basename "$file" .zip)"
+            mkdir -p "$destination"
+
+            if ! unzip -oq "$file" -d "$destination"; then
+              echo "::warning::Could not extract $file"
+            fi
+          done < <(find . -type f -name '*.zip' \
+            -not -path './.git/*' -print0)
+
       - name: Locate Flutter Project
         id: locate
         shell: bash
         run: |
-          PROJECT_FILE="$(find . \
-            -type f \
-            -name pubspec.yaml \
-            -not -path './.git/*' \
-            -not -path './build/*' \
-            -print -quit)"
+          PROJECT_FILE=""
+
+          for root in "$GITHUB_WORKSPACE" "$RUNNER_TEMP/zena_extract"; do
+            [ -d "$root" ] || continue
+
+            PROJECT_FILE=$(find "$root" \
+              -type f -name pubspec.yaml \
+              -not -path '*/.git/*' \
+              -not -path '*/build/*' \
+              -print -quit)
+
+            if [ -n "$PROJECT_FILE" ]; then
+              break
+            fi
+          done
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "::error::Tiada pubspec.yaml ditemui."
-            echo "Repository mesti mengandungi projek sumber Flutter."
-            echo "APK sahaja tidak boleh digunakan untuk membina semula aplikasi Flutter."
+            echo "::error::Tiada pubspec.yaml ditemui, termasuk dalam ZIP."
+            echo "Fail APK sahaja tidak mengandungi kod sumber Flutter."
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$PROJECT_FILE")"
 
           if [ ! -f "$PROJECT_DIR/lib/main.dart" ]; then
-            echo "::error::lib/main.dart tiada dalam $PROJECT_DIR"
+            echo "::error::lib/main.dart tiada dalam projek Flutter."
             exit 1
           fi
 
           echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
-          echo "Flutter project found: $PROJECT_DIR"
+          echo "Found Flutter project: $PROJECT_DIR"
 
       - name: Set Up Java
         uses: actions/setup-java@v4
@@ -59,7 +83,7 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Check Android Configuration
+      - name: Prepare Android Project
         working-directory: ${{ steps.locate.outputs.project_dir }}
         shell: bash
         run: |
@@ -86,15 +110,17 @@ jobs:
             echo "No Dart tests found; skipping."
           fi
 
-      - name: Build Release APK
+      - name: Build APK
         working-directory: ${{ steps.locate.outputs.project_dir }}
         run: flutter build apk --release
 
-      - name: Prepare APK
+      - name: Prepare Artifact
         working-directory: ${{ steps.locate.outputs.project_dir }}
-        run: cp build/app/outputs/flutter-apk/app-release.apk "$GITHUB_WORKSPACE/Zena Bug.apk"
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "$GITHUB_WORKSPACE/Zena Bug.apk"
 
-      - name: Upload APK Artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Zena Bug
